@@ -2,12 +2,12 @@
 
 import { useState } from 'react';
 import { Plus, Trash2, ExternalLink, Copy, X, Pencil, SquareTerminal, MinusCircle, PlusCircle } from 'lucide-react';
+import { useData } from '@/context/DataContext';
 import { WorkTask } from '@/lib/types';
-import { mockWorkTasks } from '@/lib/mockData';
 import toast from 'react-hot-toast';
 
 export default function WorkTaskSection() {
-  const [tasks, setTasks] = useState<WorkTask[]>(mockWorkTasks);
+  const { workTasks, addWorkTask, updateWorkTask, deleteWorkTask } = useData();
   const [showAdd, setShowAdd] = useState(false);
   const [editId, setEditId] = useState<number | null>(null);
   const [viewTask, setViewTask] = useState<WorkTask | null>(null);
@@ -18,31 +18,28 @@ export default function WorkTaskSection() {
     prompts: ['']
   });
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!form.title.trim()) {
       toast.error('업무명을 입력해주세요');
       return;
     }
 
     const filteredPrompts = form.prompts.filter(p => p.trim() !== '');
-    if (filteredPrompts.length === 0) {
-      toast.error('최소 하나의 프롬프트를 입력해주세요');
-      return;
-    }
     
     if (editId) {
-      setTasks(prev => prev.map(t => t.id === editId ? { ...t, ...form, prompts: filteredPrompts } : t));
+      await updateWorkTask(editId, { 
+        title: form.title, 
+        gpts_link: form.gpts_link, 
+        prompts: filteredPrompts 
+      });
       toast.success('업무가 수정됐습니다');
       setEditId(null);
     } else {
-      const newTask: WorkTask = {
-        id: Date.now(),
+      await addWorkTask({
         title: form.title,
         gpts_link: form.gpts_link,
-        prompts: filteredPrompts,
-        created_at: new Date().toISOString()
-      };
-      setTasks(prev => [...prev, newTask]);
+        prompts: filteredPrompts
+      });
       toast.success('업무가 추가됐습니다');
     }
     
@@ -63,10 +60,10 @@ export default function WorkTaskSection() {
     setViewTask(null);
   };
 
-  const handleDelete = (id: number, e?: React.MouseEvent) => {
+  const handleDelete = async (id: number, e?: React.MouseEvent) => {
     e?.stopPropagation();
     if (!confirm('업무를 삭제하시겠습니까?')) return;
-    setTasks(prev => prev.filter(t => t.id !== id));
+    await deleteWorkTask(id);
     toast.success('삭제됐습니다');
     setViewTask(null);
   };
@@ -112,7 +109,7 @@ export default function WorkTaskSection() {
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
-        {tasks.map(t => (
+        {workTasks.map((t: WorkTask) => (
           <div 
             key={t.id} 
             className="stat-card" 
@@ -186,7 +183,7 @@ export default function WorkTaskSection() {
               <div className="detail-section">
                 <div className="detail-section-title">Prompt List ({viewTask.prompts?.length}개)</div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                  {viewTask.prompts?.map((p, i) => (
+                  {viewTask.prompts?.map((p: string, i: number) => (
                     <div key={i} style={{ position: 'relative' }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
                         <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--accent)', background: 'var(--accent-light)', padding: '2px 8px', borderRadius: 4 }}>Prompt #{i + 1}</div>

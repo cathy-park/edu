@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from '@/lib/supabase';
 import { 
   Student, Project, Team, Consultation, ProjectScore, 
-  TeamMember, StudentTag 
+  TeamMember, StudentTag, WorkTask 
 } from '@/lib/types';
 import toast from 'react-hot-toast';
 
@@ -15,6 +15,7 @@ interface DataContextType {
   consultations: Consultation[];
   tags: StudentTag[];
   teamMembers: TeamMember[];
+  workTasks: WorkTask[];
   stages: string[];
   isLoading: boolean;
   
@@ -54,6 +55,11 @@ interface DataContextType {
   // Stages (Badges) CRUD
   addStage: (stage: string) => void;
   removeStage: (stage: string) => void;
+
+  // WorkTask CRUD
+  addWorkTask: (task: Omit<WorkTask, 'id' | 'created_at'>) => Promise<void>;
+  updateWorkTask: (id: number, data: Partial<WorkTask>) => Promise<void>;
+  deleteWorkTask: (id: number) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -65,6 +71,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [consultations, setConsultations] = useState<Consultation[]>([]);
   const [tags, setTags] = useState<StudentTag[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
+  const [workTasks, setWorkTasks] = useState<WorkTask[]>([]);
   const [stages, setStages] = useState<string[]>(['기획', '디자인', '개발', '검증', '완료']);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -79,14 +86,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         { data: teamsData },
         { data: consultsData },
         { data: tagsData },
-        { data: membersData }
+        { data: membersData },
+        { data: workTasksData }
       ] = await Promise.all([
         supabase.from('students').select('*, cohorts(*), grades(*), student_tags(*)').order('id', { ascending: false }),
         supabase.from('projects').select('*').order('id', { ascending: false }),
         supabase.from('teams').select('*, projects(*)').order('id', { ascending: false }),
         supabase.from('consultations').select('*').order('id', { ascending: false }),
         supabase.from('student_tags').select('*'),
-        supabase.from('team_members').select('*, students(*)')
+        supabase.from('team_members').select('*, students(*)'),
+        supabase.from('work_tasks').select('*').order('id', { ascending: false })
       ]);
 
       if (studentsData) {
@@ -102,6 +111,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (consultsData) setConsultations(consultsData);
       if (tagsData) setTags(tagsData);
       if (membersData) setTeamMembers(membersData);
+      if (workTasksData) setWorkTasks(workTasksData);
 
     } catch (error) {
       console.error('Fetch error:', error);
@@ -424,15 +434,43 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setStages(prev => prev.filter(s => s !== stage));
   };
 
+  const addWorkTask = async (task: Omit<WorkTask, 'id' | 'created_at'>) => {
+    const { data, error } = await supabase.from('work_tasks').insert([task]).select().single();
+    if (error) {
+      toast.error('업무 추가 실패');
+    } else if (data) {
+      setWorkTasks(prev => [data, ...prev]);
+    }
+  };
+
+  const updateWorkTask = async (id: number, data: Partial<WorkTask>) => {
+    const { error } = await supabase.from('work_tasks').update(data).eq('id', id);
+    if (error) {
+      toast.error('업무 수정 실패');
+    } else {
+      setWorkTasks(prev => prev.map(t => t.id === id ? { ...t, ...data } : t));
+    }
+  };
+
+  const deleteWorkTask = async (id: number) => {
+    const { error } = await supabase.from('work_tasks').delete().eq('id', id);
+    if (error) {
+      toast.error('업무 삭제 실패');
+    } else {
+      setWorkTasks(prev => prev.filter(t => t.id !== id));
+    }
+  };
+
   return (
     <DataContext.Provider value={{ 
-      students, projects, teams, consultations, tags, teamMembers, stages, isLoading,
+      students, projects, teams, consultations, tags, teamMembers, workTasks, stages, isLoading,
       addStudent, updateStudent, deleteStudent, updateStudentTags,
       addTeam, updateTeam, deleteTeam, addTeamMember, removeTeamMember,
       updateProjectScore, addConsultation, updateConsultation, deleteConsultation, 
       updateTeamProgress, updateTeamScore,
       addProjectCategory, deleteProjectCategory, deleteProject, updateProject, addProject,
-      addStage, removeStage
+      addStage, removeStage,
+      addWorkTask, updateWorkTask, deleteWorkTask
     }}>
       {children}
     </DataContext.Provider>

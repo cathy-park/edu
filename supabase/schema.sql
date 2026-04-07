@@ -205,6 +205,17 @@ alter table public.project_logs disable row level security;
 alter table public.schedules disable row level security;
 alter table public.todos disable row level security;
 
+-- 13. work_tasks (업무 및 AI 프롬프트 메모)
+create table public.work_tasks (
+  id serial primary key,
+  title varchar(200) not null,
+  gpts_link text,
+  prompts text[] default '{}',
+  created_at timestamptz default now()
+);
+
+alter table public.work_tasks disable row level security;
+
 -- =============================================
 -- 샘플 데이터 입력
 -- =============================================
