@@ -117,7 +117,7 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
         <div style={{ flex: 1 }}>
            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 26, fontWeight: 900 }}>{greeting}, {instructorName}님 👋</div>
-           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>v8.34 Nav Fix</span></div>
+           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>v8.35 Nav Fixed</span></div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
            {showAddCohort ? (
@@ -159,7 +159,7 @@ export default function DashboardPage() {
           <div className="stat-card-content"><div className="stat-card-label">이번주 상담</div><div className="stat-card-value">{consultationsThisWeek}건</div></div>
           <div className="stat-card-icon" style={{ background: 'rgba(16,185,129,0.1)' }}><MessageSquare size={20} color="#10b981" /></div>
         </div>
-        <div className="stat-card" onClick={() => router.push('/projects')} style={{ cursor: 'pointer' }}>
+        <div className="stat-card" onClick={() => router.push('/teams')} style={{ cursor: 'pointer' }}>
           <div className="stat-card-content"><div className="stat-card-label">진행 중 프로젝트</div><div className="stat-card-value">{ongoingProjectsCount}개</div></div>
           <div className="stat-card-icon" style={{ background: 'rgba(59,130,246,0.1)' }}><Rocket size={20} color="#3b82f6" /></div>
         </div>
