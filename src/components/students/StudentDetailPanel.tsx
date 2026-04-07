@@ -49,6 +49,8 @@ export default function StudentDetailPanel({
     [students, currentStudentId, initialStudent]
   );
 
+  console.log("StudentDetailPanel Version: [v8.11] for Student ID:", currentStudentId);
+
   const studentTags = useMemo(() => 
     allTags.filter(t => t.student_id === currentStudentId),
     [allTags, currentStudentId]
@@ -58,16 +60,27 @@ export default function StudentDetailPanel({
   const studentTimeline = useMemo(() => {
     // 1. Individual consultations
     const individual = allConsultations
-      .filter(c => c.student_id === currentStudentId)
+      .filter(c => Number(c.student_id) === Number(currentStudentId))
       .map(c => ({ ...c, isTeam: false, date: c.consulted_at }));
     
     // 2. Team logs for teams this student is in
-    const myTeams = teamMembers.filter(tm => tm.student_id === currentStudentId).map(tm => tm.team_id);
-    const team = projectLogs
-      .filter(pl => myTeams.includes(pl.team_id))
-      .map(pl => ({ ...pl, isTeam: true, date: pl.log_date, student_id: currentStudentId, consulted_at: pl.log_date }));
+    const myTeamIds = teamMembers
+      .filter(tm => Number(tm.student_id) === Number(currentStudentId))
+      .map(tm => tm.team_id);
+      
+    const teamsInLogs = projectLogs
+      .filter(pl => myTeamIds.includes(pl.team_id))
+      .map(pl => ({ 
+         ...pl, 
+         isTeam: true, 
+         date: pl.log_date, 
+         student_id: currentStudentId, 
+         consulted_at: pl.log_date,
+         type: pl.type || '회의록'
+      }));
     
-    return [...individual, ...team].sort((a, b) => b.date.localeCompare(a.date));
+    console.log(`Timeline for Sid ${currentStudentId}: ind=${individual.length}, team=${teamsInLogs.length}`);
+    return [...individual, ...teamsInLogs].sort((a, b) => b.date.localeCompare(a.date));
   }, [allConsultations, projectLogs, teamMembers, currentStudentId]);
 
   const [activeTab, setActiveTab] = useState<'info' | 'projects' | 'consultations'>(initialTab);
@@ -95,7 +108,7 @@ export default function StudentDetailPanel({
   const calculateGPA = () => {
     if (student.project_scores.length === 0) return '0.00';
     const total = student.project_scores.reduce((acc, s) => {
-      const val = s.team_score || s.average_score || 0;
+      const val = Number(s.team_score || s.average_score || 0);
       return acc + val;
     }, 0);
     return (total / student.project_scores.length).toFixed(2);
@@ -195,10 +208,10 @@ export default function StudentDetailPanel({
           </button>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
-            <div className="detail-avatar" style={{ width: 64, height: 64, fontSize: 24 }}>{student.name[0]}</div>
+            <div className="detail-avatar" style={{ width: 64, height: 64, fontSize: 24, border: '2px solid var(--accent)' }}>{student.name[0]}</div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <h2 className="page-title" style={{ margin: 0, fontSize: 24 }}>{student.name}</h2>
+                <h2 className="page-title" style={{ margin: 0, fontSize: 24 }}>{student.name} <small style={{ fontSize: 10, opacity: 0.5 }}>v8.11</small></h2>
                 <span className={`badge badge-${student.status}`}>{student.status}</span>
               </div>
               <div className="page-subtitle" style={{ marginTop: 4 }}>{student.cohort?.name} · {student.age}세 · {student.email}</div>
@@ -277,7 +290,7 @@ export default function StudentDetailPanel({
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                    {participatedProjects.map(({ project, score }) => {
-                     const avgScore = score?.team_score || score?.average_score || 0;
+                     const avgScore = Number(score?.team_score || score?.average_score || 0);
                      return (
                        <div key={project.id} className="card" style={{ padding: 16 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -291,7 +304,7 @@ export default function StudentDetailPanel({
                              {project.score_categories.map(cat => (
                                <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
                                   <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{cat.label}</span>
-                                  <StarRating value={score?.category_scores[cat.id] || score?.category_scores[cat.label] || 0} readonly size={12} />
+                                  <StarRating value={Number(score?.category_scores[cat.id] || score?.category_scores[cat.label] || 0)} readonly size={12} />
                                </div>
                              ))}
                           </div>
@@ -311,11 +324,11 @@ export default function StudentDetailPanel({
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                    {filteredTimeline.map(c => (
-                     <div key={`${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: c.isTeam ? '4px solid var(--accent)' : 'none' }}>
+                     <div key={`${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: c.isTeam ? '4px solid var(--accent)' : '4px solid #94a3b8' }}>
                         <div className="consult-meta">
-                           <span className={`badge ${c.isTeam ? 'log-type-회의록' : `log-type-${c.type}`}`}>{c.type}</span>
+                           <span className="badge">{c.type}</span>
                            <span>{formatShortDate(c.date)}</span>
-                           <span style={{ fontWeight: 700 }}>{c.isTeam ? '👥 팀 전체' : '👤 개인'}</span>
+                           <span style={{ fontWeight: 700 }}>{c.isTeam ? '👥 팀 전체 활동' : '👤 개인 상담/기록'}</span>
                            {!c.isTeam && (
                              <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                                 <button onClick={() => handleOpenConsModal(c as any)}><Edit3 size={12} /></button>

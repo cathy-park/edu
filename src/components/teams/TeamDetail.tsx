@@ -5,7 +5,7 @@ import {
   X, Users, BookOpen, Clock, ChevronRight, 
   Save, Trash2, UserPlus, Star, Search, 
   Check, Plus, Link as LinkIcon, MessageSquare, 
-  Edit3, Calendar, Minus, StickyNote, Crown, Award
+  Edit3, Calendar, Minus, StickyNote, Crown, Award, UserCheck
 } from 'lucide-react';
 import { Team, Student, Project, TeamMember, Consultation, ConsultationType } from '@/lib/types';
 import { StarRating } from '@/components/common/StarRating';
@@ -30,6 +30,8 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     updateTeamMemberRole,
     projectLogs, addProjectLog, updateProjectLog, deleteProjectLog, updateTeamProjectScore
   } = useData();
+
+  console.log("TeamDetail Version: [v8.11] Rendered for Team ID:", team.id);
   
   const project = projects.find(p => p.id === team.project_id);
   const members = teamMembers.filter(m => m.team_id === team.id);
@@ -54,24 +56,26 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   const [categoryScores, setCategoryScores] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    // Attempt to load existing scores from the first member's project_scores
     if (members.length > 0) {
       const firstMember = students.find(s => s.id === members[0].student_id);
       if (firstMember) {
         const existingScore = firstMember.project_scores.find(ps => ps.project_id === team.project_id);
         if (existingScore) {
+          console.groupCollapsed("Loaded Scores for Team %d", team.id);
+          console.log("Existing Score Found:", existingScore.category_scores);
+          console.groupEnd();
           setCategoryScores(existingScore.category_scores || {});
-        } else {
-          setCategoryScores({});
+          return;
         }
       }
     }
+    setCategoryScores({});
   }, [team.id, team.project_id, members.length]);
 
   const overallScore = useMemo(() => {
     const cats = Object.values(categoryScores);
     if (cats.length === 0) return 0;
-    const total = cats.reduce((a, b) => a + b, 0);
+    const total = cats.reduce((a, b) => a + Number(b || 0), 0);
     const avg = total / cats.length;
     return Math.round(avg * 10) / 10;
   }, [categoryScores]);
@@ -82,11 +86,13 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   };
 
   const handleSaveScores = async () => {
+    console.log("Saving Team Scores:", categoryScores);
     await updateTeamProjectScore(team.id, team.project_id, categoryScores, overallScore);
     toast.success('팀 성취도가 저장되었습니다');
   };
 
   const handleSetLeader = (studentId: number) => {
+    console.log("Setting Team Leader to member ID or student ID:", studentId);
     updateTeam(team.id, { leader_id: studentId });
     toast.success('팀장이 변경되었습니다');
   };
@@ -113,7 +119,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         }
         toast.success('기록이 수정되었습니다');
       } else {
-        if (logForm.student_id === -1) {
+        if (Number(logForm.student_id) === -1) {
           await addProjectLog({
             team_id: team.id,
             log_date: logForm.date,
@@ -124,7 +130,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
           toast.success('팀 활동 로그가 추가되었습니다');
         } else {
           await addConsultation({
-            student_id: logForm.student_id,
+            student_id: Number(logForm.student_id),
             project_id: team.project_id,
             content: logForm.content,
             consulted_at: combinedDateTime,
@@ -133,14 +139,17 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
           toast.success('개인 로그가 추가되었습니다');
         }
       }
-    } catch (err) { console.error(err); }
+    } catch (err) { 
+      console.error("Log Submission Error:", err);
+      toast.error('로그 저장 중 오류가 발생했습니다');
+    }
     setShowLogModal(false);
   };
 
   const teamTimeline = useMemo(() => {
     const memberIds = members.map(m => m.student_id);
     const individualLogs = consultations
-      .filter(c => memberIds.includes(c.student_id) && c.project_id === team.project_id)
+      .filter(c => memberIds.includes(Number(c.student_id)) && c.project_id === team.project_id)
       .map(c => ({ ...c, isTeam: false, date: c.consulted_at }));
     const teamLogs = projectLogs
       .filter(pl => pl.team_id === team.id)
@@ -172,15 +181,15 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
           </button>
           
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div className="detail-avatar" style={{ width: 48, height: 48, fontSize: 20 }}>{team.team_name[0]}</div>
+            <div className="detail-avatar" style={{ width: 48, height: 48, fontSize: 20, border: '2px solid var(--accent)' }}>{team.team_name[0]}</div>
             <div>
-              <h2 className="page-title" style={{ margin: 0, fontSize: 22 }}>{team.team_name}</h2>
+              <h2 className="page-title" style={{ margin: 0, fontSize: 22 }}>{team.team_name} <small style={{ fontSize: 10, opacity: 0.5 }}>v8.11</small></h2>
               <div className="page-subtitle" style={{ fontSize: 13 }}>{project?.name}</div>
             </div>
           </div>
         </div>
 
-        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
+        <div className="detail-tabs">
            {[
              { id: 'info', label: '팀 정보', icon: Users },
              { id: 'eval', label: '성과 평가', icon: Award },
@@ -189,13 +198,8 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
              <button 
                 key={tab.id} 
                 onClick={() => setActiveTab(tab.id as any)} 
-                style={{ 
-                  flex: 1, padding: '16px 0', border: 'none', background: 'none', 
-                  fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500, 
-                  color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)',
-                  borderBottom: `2.5px solid ${activeTab === tab.id ? 'var(--accent)' : 'transparent'}`,
-                  transition: 'all 0.2s'
-                }}>
+                className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
+                style={{ flex: 1, padding: '16px 0', border: 'none', background: 'none', fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500, color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)', borderBottom: `2.5px solid ${activeTab === tab.id ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.2s' }}>
                 {tab.label}
              </button>
            ))}
@@ -223,32 +227,48 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                    <div className="detail-section-title"><Users size={14} /> 팀원 ({members.length})</div>
                    <div className="card" style={{ padding: 0 }}>
                       <table style={{ width: '100%' }}>
+                         <thead>
+                            <tr>
+                               <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, color: 'var(--text-muted)' }}>수강생</th>
+                               <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, color: 'var(--text-muted)' }}>역할</th>
+                               <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: 11, color: 'var(--text-muted)' }}>팀장</th>
+                               <th style={{ padding: '10px 16px', textAlign: 'right' }}></th>
+                            </tr>
+                         </thead>
                          <tbody>
                             {members.map(member => {
                               const s = students.find(x => x.id === member.student_id);
                               const isLeader = member.student_id === team.leader_id;
                               return s ? (
-                                <tr key={member.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                <tr key={`mem-${member.id}`} style={{ borderBottom: '1px solid var(--border)' }}>
                                    <td style={{ padding: '12px 16px' }}>
-                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
-                                         {s.name} {isLeader && <Crown size={12} color="var(--yellow)" />}
-                                         {!isLeader && (
-                                           <button onClick={() => handleSetLeader(s.id)} className="btn-ghost" style={{ padding: 2 }} title="팀장 지정"><Crown size={11} color="var(--text-muted)" /></button>
-                                         )}
-                                      </div>
+                                      <div style={{ fontSize: 13, fontWeight: 600 }}>{s.name}</div>
                                    </td>
                                    <td style={{ padding: '12px 16px' }}>
                                       <input className="form-input" style={{ height: 30, fontSize: 12 }} value={member.role || ''} onChange={e => updateTeamMemberRole(member.id, e.target.value)} placeholder="역할..." />
                                    </td>
+                                   <td style={{ textAlign: 'center', padding: '12px 16px' }}>
+                                      <button 
+                                         onClick={() => handleSetLeader(s.id)} 
+                                         className={`btn-icon ${isLeader ? 'active' : ''}`} 
+                                         style={{ 
+                                            background: isLeader ? 'var(--yellow-light)' : 'none',
+                                            color: isLeader ? 'var(--yellow)' : 'var(--border)',
+                                            border: 'none', padding: 6, borderRadius: '50%'
+                                         }}
+                                      >
+                                         <Crown size={18} fill={isLeader ? 'var(--yellow)' : 'none'} />
+                                      </button>
+                                   </td>
                                    <td style={{ textAlign: 'right', padding: '12px 16px' }}>
-                                      <button onClick={() => removeTeamMember(member.id)} style={{ color: 'var(--text-muted)' }}><Trash2 size={13} /></button>
+                                      <button onClick={() => removeTeamMember(member.id)} style={{ color: 'var(--red)', opacity: 0.5 }}><Trash2 size={13} /></button>
                                    </td>
                                 </tr>
                               ) : null;
                             })}
                          </tbody>
                       </table>
-                      <button className="add-todo-btn" style={{ padding: '12px 16px', justifyContent: 'center' }} onClick={() => setShowMemberSelector(true)}>
+                      <button className="add-todo-btn" style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', justifyContent: 'center' }} onClick={() => setShowMemberSelector(true)}>
                          <Plus size={14} /> 팀원 추가
                       </button>
                    </div>
@@ -258,23 +278,26 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
            {activeTab === 'eval' && (
              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div className="card" style={{ background: 'var(--accent)', color: 'white', border: 'none', padding: 24, textAlign: 'center' }}>
-                   <div style={{ opacity: 0.9, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>팀 종합 성취도</div>
+                <div className="card" style={{ background: 'linear-gradient(135deg, var(--accent), #4f46e5)', color: 'white', border: 'none', padding: 24, textAlign: 'center', borderRadius: 20 }}>
+                   <div style={{ opacity: 0.9, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>팀 종합 성취도 (v8.11)</div>
                    <div style={{ fontSize: 48, fontWeight: 900 }}>{overallScore.toFixed(1)}</div>
                 </div>
-                <div className="card">
-                   {project?.score_categories.map(cat => (
-                     <div key={`cat-row-${cat.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
+                <div className="card" style={{ padding: '10px 20px' }}>
+                   {project?.score_categories.map((cat, idx) => (
+                     <div key={`cat-row-${cat.id || idx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: idx === project.score_categories.length - 1 ? 'none' : '1px solid var(--border)' }}>
                         <span style={{ fontSize: 13, fontWeight: 700 }}>{cat.label}</span>
                         <StarRating 
-                           key={`team-star-${cat.id}-${categoryScores[cat.id] || 0}`}
+                           key={`team-star-${team.id}-${cat.id || idx}-${categoryScores[cat.id] || 0}`}
                            value={categoryScores[cat.id] || 0} 
-                           onChange={v => setCategoryScores(prev => ({ ...prev, [cat.id]: v }))} 
+                           onChange={v => {
+                              console.log(`Setting ${cat.label} (${cat.id}) to ${v}`);
+                              setCategoryScores(prev => ({ ...prev, [cat.id]: v }));
+                           }} 
                            size={20} 
                         />
                      </div>
                    ))}
-                   <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 48 }} onClick={handleSaveScores}>
+                   <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 48, borderRadius: 12 }} onClick={handleSaveScores}>
                       <Save size={16} /> 팀 점수 저장
                    </button>
                 </div>
@@ -283,7 +306,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
            {activeTab === 'logs' && (
              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <button className="btn btn-primary" style={{ width: '100%', gap: 6 }} onClick={() => { 
+                <button className="btn btn-primary" style={{ width: '100%', gap: 6, height: 44, borderRadius: 12 }} onClick={() => { 
                    setEditingLog(null); 
                    setLogForm({ 
                      type: '회의록', date: format(new Date(), 'yyyy-MM-dd'), time: format(new Date(), 'HH:mm'), 
@@ -294,12 +317,13 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                    <Plus size={15} /> 활동 로그 추가
                 </button>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
+                   {teamTimeline.length === 0 && <div className="empty-state">활동 로그가 없습니다.</div>}
                    {teamTimeline.map(c => (
-                     <div key={`${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: c.isTeam ? '4px solid var(--accent)' : 'none' }}>
+                     <div key={`${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: c.isTeam ? '4px solid var(--accent)' : '4px solid #94a3b8' }}>
                         <div className="consult-meta">
                            <span className="badge">{c.type}</span>
                            <span>{formatShortDate(c.date)}</span>
-                           <span>{c.isTeam ? '👥 팀' : `👤 ${students.find(s=>s.id===c.student_id)?.name || '개인'}`}</span>
+                           <span style={{ fontWeight: 700 }}>{c.isTeam ? '👥 팀' : `👤 ${students.find(s=>s.id===Number(c.student_id))?.name || '개인'}`}</span>
                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                               <button onClick={() => { 
                                 setEditingLog(c); 
@@ -369,7 +393,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                  <div className="form-field">
                     <label className="form-label">유형</label>
                     <select className="form-select" value={logForm.type} onChange={e => setLogForm(f => ({ ...f, type: e.target.value as any }))}>
-                       {logForm.student_id === -1 ? (
+                       {Number(logForm.student_id) === -1 ? (
                          <>
                            <option value="회의록">회의록</option>
                            <option value="멘토피드백">멘토피드백</option>
