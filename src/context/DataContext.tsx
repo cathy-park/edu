@@ -19,6 +19,7 @@ interface DataContextType {
   workTasks: WorkTask[];
   todos: Todo[];
   schedules: Schedule[];
+  projectLogs: any[];
   stages: string[];
   isLoading: boolean;
   
@@ -56,6 +57,11 @@ interface DataContextType {
   updateProject: (id: number, data: Partial<Project>) => Promise<void>;
   addProject: (p: Omit<Project, 'id'>) => Promise<number | undefined>;
   
+  // Project Log CRUD
+  addProjectLog: (log: any) => Promise<void>;
+  updateProjectLog: (id: number, data: any) => Promise<void>;
+  deleteProjectLog: (id: number) => Promise<void>;
+  
   // Stages (Badges) CRUD
   addStage: (stage: string) => void;
   removeStage: (stage: string) => void;
@@ -91,6 +97,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [workTasks, setWorkTasks] = useState<WorkTask[]>([]);
   const [todos, setTodos] = useState<Todo[]>([]);
   const [schedules, setSchedules] = useState<Schedule[]>([]);
+  const [projectLogs, setProjectLogs] = useState<any[]>([]);
   const [stages, setStages] = useState<string[]>(['기획', '디자인', '개발', '검증', '완료']);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -117,7 +124,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         { data: membersData, error: mErr },
         { data: workTasksData, error: wErr },
         { data: todosData, error: tdErr },
-        { data: schedulesData, error: scErr }
+        { data: schedulesData, error: scErr },
+        { data: projectLogsData, error: plErr }
       ] = await Promise.all([
         supabase.from('students').select('*, cohorts(*), grades(*)').order('id', { ascending: false }),
         supabase.from('projects').select('*').order('id', { ascending: false }),
@@ -127,11 +135,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         supabase.from('team_members').select('*, students(*)'),
         supabase.from('work_tasks').select('*').order('id', { ascending: false }),
         supabase.from('todos').select('*').order('id', { ascending: false }),
-        supabase.from('schedules').select('*').order('id', { ascending: false })
+        supabase.from('schedules').select('*').order('id', { ascending: false }),
+        supabase.from('project_logs').select('*').order('id', { ascending: false })
       ]);
 
       // Log any fetch errors
-      [sErr, pErr, tErr, cErr, tgErr, mErr, wErr, tdErr, scErr].forEach(err => {
+      [sErr, pErr, tErr, cErr, tgErr, mErr, wErr, tdErr, scErr, plErr].forEach(err => {
         if (err) console.error('Fetch error detail:', err.message);
       });
 
@@ -151,6 +160,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (workTasksData) setWorkTasks(workTasksData);
       if (todosData) setTodos(todosData);
       if (schedulesData) setSchedules(schedulesData);
+      if (projectLogsData) setProjectLogs(projectLogsData);
 
     } catch (error) {
       console.error('Fetch error:', error);
@@ -471,6 +481,36 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const scoreObj = student?.project_scores.find(ps => ps.project_id === team.project_id);
       await updateProjectScore(m.student_id, team.project_id, scoreObj?.category_scores || {}, score);
     }
+    toast.success('팀 전체 성적이 업데이트되었습니다.');
+  };
+
+  const addProjectLog = async (log: any) => {
+    const { data, error } = await supabase.from('project_logs').insert([log]).select().single();
+    if (error) {
+      console.error('Project log error:', error);
+      toast.error('로그 저장에 실패했습니다');
+    } else {
+      setProjectLogs(prev => [data, ...prev]);
+    }
+  };
+
+  const updateProjectLog = async (id: number, data: any) => {
+    const { error } = await supabase.from('project_logs').update(data).eq('id', id);
+    if (error) {
+      toast.error('로그 수정 실패');
+    } else {
+      setProjectLogs(prev => prev.map(l => l.id === id ? { ...l, ...data } : l));
+    }
+  };
+
+  const deleteProjectLog = async (id: number) => {
+    const { error } = await supabase.from('project_logs').delete().eq('id', id);
+    if (error) {
+      toast.error('로그 삭제 실패');
+    } else {
+      setProjectLogs(prev => prev.filter(l => l.id !== id));
+      toast.success('로그가 삭제되었습니다');
+    }
   };
 
   const addProjectCategory = async (projectId: number, label: string) => {
@@ -770,12 +810,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DataContext.Provider value={{ 
-      students, projects, teams, consultations, tags, teamMembers, workTasks, todos, schedules, stages, isLoading,
+      students, projects, teams, consultations, tags, teamMembers, workTasks, todos, schedules, projectLogs, stages, isLoading,
       addStudent, updateStudent, deleteStudent, updateStudentTags,
       addTeam, updateTeam, deleteTeam, addTeamMember, updateTeamMemberRole, removeTeamMember,
       updateProjectScore, addConsultation, updateConsultation, deleteConsultation, 
       updateTeamProgress, updateTeamScore,
       addProjectCategory, deleteProjectCategory, deleteProject, updateProject, addProject,
+      addProjectLog, updateProjectLog, deleteProjectLog,
       addStage, removeStage,
       addWorkTask, updateWorkTask, deleteWorkTask,
       addSchedule, updateSchedule, deleteSchedule,

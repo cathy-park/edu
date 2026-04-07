@@ -167,6 +167,24 @@ export default function StudentDetailPanel({
       .filter(Boolean) as Student[];
   };
 
+  const formatShortDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    try {
+      const d = new Date(dateStr);
+      const now = new Date();
+      const HHmm = dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : '';
+      const MMDD = `${d.getMonth() + 1}/${d.getDate()}`;
+      
+      if (HHmm) {
+        if (d.toDateString() === now.toDateString()) return HHmm;
+        return `${MMDD} ${HHmm}`;
+      }
+      return MMDD;
+    } catch {
+      return dateStr.split('T')[0];
+    }
+  };
+
   return (
     <div className="premium-panel-overlay" onClick={onClose}>
       <div className="premium-panel" onClick={e => e.stopPropagation()}>
@@ -295,7 +313,7 @@ export default function StudentDetailPanel({
                           <div className="p-pj-head">
                              <div>
                                 <div className="p-pj-name">{displayName} <ExternalLink size={12} /></div>
-                                <div className="p-pj-date">{s.created_at.split('T')[0]}</div>
+                                <div className="p-pj-date">{formatShortDate(s.created_at)}</div>
                              </div>
                              <div className="p-pj-score">{s.average_score.toFixed(1)}</div>
                           </div>
@@ -304,22 +322,22 @@ export default function StudentDetailPanel({
                              {project?.score_categories.slice(0, 4).map(cat => (
                                <div key={cat.id} className="p-pj-cat">
                                   <span>{cat.label}</span>
-                                  <div className="p-pj-stars"><StarRating value={s.category_scores[cat.id] || 0} readonly size={10} /></div>
+                                  <div className="p-pj-stars"><StarRating value={s.category_scores[cat.id] || 0} readonly size={14} /></div>
                                </div>
                              ))}
                           </div>
 
                           <div className="p-pj-foot">
                              <div className="p-participants">
-                                {participants.map(p => (
+                                {participants.map((p: any) => (
                                   <button key={p.id} className="p-part-chip" onClick={(e) => { e.stopPropagation(); setCurrentStudentId(p.id); }}>
                                      {p.name}
                                   </button>
                                 ))}
                              </div>
                              <div className="p-final-score">
-                                <span className="p-f-l">최종</span>
-                                <span className="p-f-v">{s.team_score.toFixed(1)}</span>
+                                <span className="p-f-l" style={{ color: 'var(--accent)', fontWeight: 800 }}>최종 팀점수</span>
+                                <span className="p-f-v" style={{ color: 'var(--accent)', fontSize: '20px' }}>{s.team_score.toFixed(1)}</span>
                              </div>
                           </div>
                        </div>
@@ -348,7 +366,7 @@ export default function StudentDetailPanel({
                         <div className="p-time-card">
                            <div className="p-time-head">
                               <span className="p-time-type">{c.type}</span>
-                              <span className="p-time-date">{c.consulted_at}</span>
+                              <span className="p-time-date">{formatShortDate(c.consulted_at)}</span>
                               <div className="p-time-acts">
                                  <button onClick={() => handleOpenConsModal(c)}><Edit3 size={13} /></button>
                                  <button className="danger" onClick={() => deleteConsultation(c.id)}><Trash2 size={13} /></button>

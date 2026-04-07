@@ -26,7 +26,8 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     students, projects, updateProjectScore, 
     teamMembers, addTeamMember, removeTeamMember,
     updateTeam, consultations, addConsultation, updateConsultation, deleteConsultation,
-    deleteProjectCategory, updateTeamMemberRole
+    deleteProjectCategory, updateTeamMemberRole,
+    projectLogs, addProjectLog, updateProjectLog, deleteProjectLog
   } = useData();
   
   const project = projects.find(p => p.id === team.project_id);
@@ -40,10 +41,11 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   const [memberSearch, setMemberSearch] = useState('');
   
   const [showLogModal, setShowLogModal] = useState(false);
-  const [editingLog, setEditingLog] = useState<Consultation | null>(null);
+  const [editingLog, setEditingLog] = useState<any>(null);
   const [logForm, setLogForm] = useState({
-    type: '학습점검' as ConsultationType,
+    type: '학습점검',
     date: new Date().toISOString().split('T')[0],
+    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
     content: '',
     student_id: 0
   });
@@ -89,50 +91,89 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   const handleLogSubmit = async () => {
     if (!logForm.content.trim() || logForm.student_id === 0) return toast.error('내용과 수강생을 선택하세요');
     
+    const combinedDateTime = `${logForm.date}T${logForm.time}:00`;
+
     try {
       if (editingLog) {
-        await updateConsultation(editingLog.id, {
-          content: logForm.content,
-          consulted_at: logForm.date,
-          type: logForm.type,
-          student_id: logForm.student_id
-        });
+        // Check if it's a project log or consultation
+        if ('team_id' in editingLog && !('student_id' in editingLog)) {
+          await updateProjectLog(editingLog.id, {
+            content: logForm.content,
+            log_date: logForm.date,
+            type: logForm.type,
+            title: logForm.type // Use type as title for consistency
+          });
+        } else {
+          await updateConsultation(editingLog.id, {
+            content: logForm.content,
+            consulted_at: combinedDateTime,
+            type: logForm.type as any,
+            student_id: logForm.student_id
+          });
+        }
         toast.success('로그가 수정되었습니다');
       } else {
         if (logForm.student_id === -1) {
-          for (const m of members) {
-            await addConsultation({
-              student_id: m.student_id,
-              project_id: team.project_id,
-              content: logForm.content,
-              consulted_at: logForm.date,
-              type: logForm.type
-            });
-          }
-          toast.success(`팀원 전체(${members.length}명)에게 로그가 기록되었습니다`);
+          // Add to project_logs (Team-wide)
+          await addProjectLog({
+            team_id: team.id,
+            log_date: logForm.date,
+            type: logForm.type,
+            content: logForm.content,
+            title: logForm.type
+          });
+          toast.success('팀 전체 활동 로그가 추가되었습니다');
         } else {
+          // Add to consultations (Individual)
           await addConsultation({
             student_id: logForm.student_id,
             project_id: team.project_id,
             content: logForm.content,
-            consulted_at: logForm.date,
-            type: logForm.type
+            consulted_at: combinedDateTime,
+            type: logForm.type as any
           });
-          toast.success('활동 로그가 추가되었습니다');
+          toast.success('개인 활동 로그가 추가되었습니다');
         }
       }
     } catch (err) {
-      // Error is handled in DataContext and rethrown
+      console.error(err);
       return;
     }
     setShowLogModal(false);
   };
 
-  const teamConsultations = useMemo(() => {
+  const teamTimeline = useMemo(() => {
     const memberIds = members.map(m => m.student_id);
-    return consultations.filter(c => memberIds.includes(c.student_id) && c.project_id === team.project_id)
-      .sort((a, b) => b.consulted_at.localeCompare(a.consulted_at));
-  }, [consultations, members, team.project_id]);
+    
+    // 1. Get individual consultations
+    const individualLogs = consultations
+      .filter(c => memberIds.includes(c.student_id) && c.project_id === team.project_id)
+      .map(c => ({ ...c, isTeam: false, date: c.consulted_at }));
+
+    // 2. Get team project logs
+    const teamLogs = projectLogs
+      .filter(pl => pl.team_id === team.id)
+      .map(pl => ({ ...pl, isTeam: true, date: pl.log_date, student_id: -1 }));
+
+    // Merge and sort
+    return [...individualLogs, ...teamLogs].sort((a, b) => b.date.localeCompare(a.date));
+  }, [consultations, projectLogs, members, team.id, team.project_id]);
+
+  const formatShortDate = (dateStr: string) => {
+    if (!dateStr) return '';
+    // Format: MM-DD HH:mm or just HH:mm if today
+    try {
+      const d = new Date(dateStr);
+      const now = new Date();
+      const HHmm = dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : '00:00';
+      const MMDD = `${d.getMonth() + 1}-${d.getDate()}`;
+      
+      if (d.toDateString() === now.toDateString()) return HHmm;
+      return `${MMDD} ${HHmm}`;
+    } catch {
+      return dateStr.split('T')[0];
+    }
+  };
 
   return (
     <div className="panel-overlay" onClick={onClose}>
@@ -315,24 +356,49 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
             <div className="tab-stack">
               <div className="s-between">
                 <h4 className="s-title">활동 기록 / 피드백</h4>
-                <button className="btn btn-primary btn-sm" onClick={() => { setEditingLog(null); setLogForm({ type: '학습점검', date: new Date().toISOString().split('T')[0], content: '', student_id: 0 }); setShowLogModal(true); }}>
+                <button className="btn btn-primary btn-sm" onClick={() => { 
+                  setEditingLog(null); 
+                  setLogForm({ 
+                    type: '학습점검', 
+                    date: new Date().toISOString().split('T')[0], 
+                    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+                    content: '', 
+                    student_id: 0 
+                  }); 
+                  setShowLogModal(true); 
+                }}>
                   <Plus size={14} /> 로그 추가
                 </button>
               </div>
 
               <div className="logs-timeline">
-                {teamConsultations.map(c => {
+                {teamTimeline.map(c => {
                   const student = students.find(s => s.id === c.student_id);
                   return (
-                    <div key={c.id} className="log-card">
+                    <div key={`${c.isTeam ? 't' : 's'}-${c.id}`} className={`log-card ${c.isTeam ? 'is-team' : ''}`}>
                        <div className="log-head">
                           <div className="log-meta">
-                             <span className="log-date">{c.consulted_at}</span>
-                             <span className="log-author">{student?.name}</span>
+                             <span className="log-date">{formatShortDate(c.date)}</span>
+                             <span className="log-author">{c.isTeam ? '👥 팀 전체' : student?.name}</span>
                           </div>
                           <div className="log-actions">
-                             <button className="act-btn" onClick={() => { setEditingLog(c); setLogForm({ type: c.type, date: c.consulted_at, content: c.content, student_id: c.student_id }); setShowLogModal(true); }}><Edit3 size={12} /></button>
-                             <button className="act-btn danger" onClick={() => { if(confirm('삭제하시겠습니까?')) deleteConsultation(c.id); }}><Trash2 size={12} /></button>
+                             <button className="act-btn" onClick={() => { 
+                               setEditingLog(c); 
+                               setLogForm({ 
+                                 type: c.type, 
+                                 date: c.date.split('T')[0], 
+                                 time: c.date.includes('T') ? c.date.split('T')[1].slice(0, 5) : '00:00',
+                                 content: c.content, 
+                                 student_id: c.student_id 
+                               }); 
+                               setShowLogModal(true); 
+                             }}><Edit3 size={12} /></button>
+                             <button className="act-btn danger" onClick={() => { 
+                               if(confirm('삭제하시겠습니까?')) {
+                                 if (c.isTeam) deleteProjectLog(c.id);
+                                 else deleteConsultation(c.id);
+                               }
+                             }}><Trash2 size={12} /></button>
                           </div>
                        </div>
                        <div className="log-body markdown-body">
@@ -341,7 +407,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                     </div>
                   );
                 })}
-                {teamConsultations.length === 0 && <div className="empty-logs">기록된 활동 로그가 없습니다.</div>}
+                {teamTimeline.length === 0 && <div className="empty-logs">기록된 활동 로그가 없습니다.</div>}
               </div>
             </div>
           )}
@@ -473,6 +539,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         .cat-entry-row:last-child { border-bottom: none; }
         .cat-label { font-size: 14px; font-weight: 700; }
         .log-card { padding: 20px; background: var(--bg-surface); border-radius: 16px; border: 1.5px solid var(--border); }
+        .log-card.is-team { border-left: 4px solid var(--accent); background: var(--accent-light); }
         .log-actions { display: flex; gap: 8px; }
         .act-btn { background: var(--bg-elevated); border: none; padding: 6px; border-radius: 6px; cursor: pointer; color: var(--text-muted); }
         .act-btn:hover { color: var(--accent); }
