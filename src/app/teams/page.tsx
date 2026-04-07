@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect, Suspense } from 'react';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useCohort } from '@/context/CohortContext';
 import { useData } from '@/context/DataContext';
 import { 
@@ -16,6 +16,8 @@ import toast from 'react-hot-toast';
 function ProjectManagementContent() {
   const { selectedCohort } = useCohort();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  const isInitialSyncDone = React.useRef(false);
   const { 
     projects, teams, students, teamMembers, tags, consultations, stages: globalStages,
     updateTeamProgress, deleteTeam, addTeam, updateTeam, 
@@ -40,8 +42,10 @@ function ProjectManagementContent() {
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
   const [selectedTeamId, setSelectedTeamId] = useState<number | null>(null);
 
-  // Handle URL Params
+  // Handle URL Params - Only once on mount to prevent accidental resets
   useEffect(() => {
+    if (isInitialSyncDone.current) return;
+    
     const projectIdParam = searchParams.get('project');
     const studentIdParam = searchParams.get('student');
 
@@ -59,8 +63,22 @@ function ProjectManagementContent() {
           setSelectedTeamId(targetTeam.id);
         }
       }
+      isInitialSyncDone.current = true;
     }
   }, [searchParams, teams, teamMembers]);
+
+  // Sync URL when project selection changes manually
+  const handleProjectChange = (projectId: number) => {
+    setSelectedProjectId(projectId);
+    const params = new URLSearchParams(searchParams.toString());
+    if (projectId === 0) {
+      params.delete('project');
+      params.delete('student');
+    } else {
+      params.set('project', projectId.toString());
+    }
+    router.push(`?${params.toString()}`, { scroll: false });
+  };
 
   // Modals
   const [showTeamModal, setShowTeamModal] = useState(false);
@@ -271,7 +289,7 @@ function ProjectManagementContent() {
             className="form-select" 
             style={{ flex: 1, height: 40, fontWeight: 700 }}
             value={selectedProjectId}
-            onChange={(e) => setSelectedProjectId(Number(e.target.value))}
+            onChange={(e) => handleProjectChange(Number(e.target.value))}
           >
             <option value={0}>프로젝트 전체 보러가기...</option>
             {cohortProjects.map(p => (

@@ -37,8 +37,17 @@ export default function DashboardCalendar({
   while (d <= endDate) { days.push(d); d = addDays(d, 1); }
 
   const getEventsForDay = (date: Date) => {
-    const daySchedules = schedules.filter((s) => isSameDay(new Date(s.start_date), date));
-    const dayTodos = todos.filter((t) => t.due_date && isSameDay(new Date(t.due_date), date));
+    const targetStr = format(date, 'yyyy-MM-dd');
+    const daySchedules = schedules.filter((s) => {
+      const startStr = s.start_date.split('T')[0];
+      const endStr = (s.end_date || s.start_date).split('T')[0];
+      return targetStr >= startStr && targetStr <= endStr;
+    }).map(s => ({
+      ...s,
+      is_start: s.start_date.split('T')[0] === targetStr
+    }));
+    
+    const dayTodos = todos.filter((t) => t.due_date && t.due_date.split('T')[0] === targetStr);
     
     // Wrap todos as pseudo-schedules for UI display
     const todoEvents = dayTodos.map(t => ({
@@ -46,10 +55,11 @@ export default function DashboardCalendar({
       title: `[할일] ${t.title}`,
       start_date: t.due_date!,
       category: 'todo' as any,
-      is_dday: false
+      is_dday: false,
+      is_start: true
     }));
     
-    return [...daySchedules, ...todoEvents] as (Schedule | typeof todoEvents[0])[];
+    return [...daySchedules, ...todoEvents] as (Schedule & { is_start: boolean })[];
   };
 
   const ddayItems = schedules
@@ -145,33 +155,35 @@ export default function DashboardCalendar({
                     </button>
                   )}
                 </div>
-                {events.slice(0, 2).map((ev) => {
+                {events.slice(0, 3).map((ev) => {
                   const isTodo = ev.id < 0;
+                  const isStart = (ev as any).is_start;
+                  
                   return ev.is_dday ? (
-                    <div key={ev.id} className="dday-chip" title={ev.title}
+                    <div key={ev.id} className={`dday-chip ${!isStart ? 'duration-bar' : ''}`} title={ev.title}
                       onClick={(e) => { 
                         if (isTodo) return;
                         e.stopPropagation(); 
                         setModal({ mode: 'edit', schedule: ev as Schedule }); 
                       }}
-                      style={{ cursor: isTodo ? 'default' : 'pointer' }}>
-                      {ev.title}
+                      style={{ cursor: isTodo ? 'default' : 'pointer', height: isStart ? 'auto' : 6 }}>
+                      {isStart && ev.title}
                     </div>
                   ) : (
-                    <div key={ev.id} className={`cal-event ev-${ev.category}`} title={ev.title}
+                    <div key={ev.id} className={`cal-event ev-${ev.category} ${!isStart ? 'duration-bar' : ''}`} title={ev.title}
                       onClick={(e) => { 
                         if (isTodo) return;
                         e.stopPropagation(); 
                         setModal({ mode: 'edit', schedule: ev as Schedule }); 
                       }}
-                      style={{ cursor: isTodo ? 'default' : 'pointer' }}>
-                      {ev.title}
+                      style={{ cursor: isTodo ? 'default' : 'pointer', height: isStart ? 'auto' : 6, margin: isStart ? '3px 0' : '1px 0' }}>
+                      {isStart ? ev.title : ''}
                     </div>
                   );
                 })}
-                {events.length > 2 && (
+                {events.length > 3 && (
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', paddingLeft: 2 }}>
-                    +{events.length - 2}
+                    +{events.length - 3}
                   </div>
                 )}
               </div>
@@ -184,6 +196,17 @@ export default function DashboardCalendar({
         .cal-cell.selected {
           border: 1.5px solid var(--accent);
           background: var(--accent-light);
+        }
+        .cal-event.duration-bar {
+          padding: 0;
+          opacity: 0.6;
+          border-left: none;
+          min-height: 6px;
+        }
+        .dday-chip.duration-bar {
+          padding: 0;
+          opacity: 0.4;
+          min-height: 6px;
         }
         .cal-event.ev-todo {
           background: rgba(124, 58, 237, 0.1);
