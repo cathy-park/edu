@@ -20,7 +20,7 @@ export default function Sidebar() {
 
   return (
     <aside className="sidebar">
-      <div className="sidebar-logo">
+      <Link href="/" className="sidebar-logo" style={{ textDecoration: 'none', cursor: 'pointer' }}>
         <div className="sidebar-logo-icon" style={{ background: 'transparent' }}>
           <img src="/logo.png?v=7" alt="Logo" style={{ width: 36, height: 36, objectFit: 'contain' }} />
         </div>
@@ -28,7 +28,7 @@ export default function Sidebar() {
           EduManager
           <span>학생 관리 시스템</span>
         </div>
-      </div>
+      </Link>
 
       <nav className="sidebar-nav">
         <div className="nav-section-label">메뉴</div>
