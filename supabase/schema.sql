@@ -128,6 +128,7 @@ create table public.teams (
   stage varchar(50) default '기획',
   progress_pct smallint default 0 check (progress_pct between 0 and 100),
   leader_id int references public.students(id) on delete set null,
+  is_individual boolean default false,
   memo text,
   project_link text,
   created_at timestamptz default now(),
