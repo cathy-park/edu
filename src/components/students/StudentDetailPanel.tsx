@@ -35,7 +35,6 @@ export default function StudentDetailPanel({
   const [showConsModal, setShowConsModal] = useState(false);
   const [editingCons, setEditingCons] = useState<Consultation | null>(null);
 
-  // Fix 2: Team Name Mapping and Date Format (YYYY-MM-DD HH:mm)
   const studentTimeline = useMemo(() => {
     const individual = allConsultations
       .filter(c => Number(c.student_id) === Number(currentStudentId))
@@ -52,9 +51,9 @@ export default function StudentDetailPanel({
   }, [allConsultations, projectLogs, teamMembers, currentStudentId, teams]);
 
   const calculateGPA = () => {
-    if (student.project_scores.length === 0) return '0.00';
+    if (student.project_scores.length === 0) return '0.0';
     const total = student.project_scores.reduce((acc, s) => acc + Number(s.team_score || s.average_score || 0), 0);
-    return (total / student.project_scores.length).toFixed(2);
+    return (total / student.project_scores.length).toFixed(1);
   };
 
   const handleConsSubmit = async (data: Partial<Consultation>) => {
@@ -65,12 +64,13 @@ export default function StudentDetailPanel({
     } catch (error) {}
   };
 
-  // Fixed Date Format: yyyy-MM-dd HH:mm
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
     try {
-      const d = parseISO(dateStr.replace(' ', 'T'));
-      return format(d, 'yyyy-MM-dd HH:mm');
+      // 2026-04-07T20:01:00+00:00 -> 2026-04-07 20:01
+      const base = dateStr.replace('T', ' ').split('.')[0];
+      const clean = base.replace(/(\+\d{2}:\d{2}|Z)$/, '').trim();
+      return clean.slice(0, 16);
     } catch {
       return dateStr.slice(0, 16).replace('T', ' ');
     }
@@ -81,10 +81,10 @@ export default function StudentDetailPanel({
       <div className="detail-panel" onClick={e => e.stopPropagation()}>
         
         <div className="detail-panel-header" style={{ position: 'relative' }}>
-          <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--text-muted)' }}><X size={24} /></button>
+          <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--text-primary)' }}><X size={24} /></button>
           <div className="detail-avatar">{student.name[0]}</div>
           <div>
-            <h2 style={{ fontSize: 20, margin: 0 }}>{student.name}</h2>
+            <h2 style={{ fontSize: 20, margin: 0 }}>{student.name} <small style={{fontSize: 10, opacity: 0.3}}>v8.24 (Final)</small></h2>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{student.cohort?.name} · {student.email}</div>
           </div>
         </div>
@@ -106,7 +106,7 @@ export default function StudentDetailPanel({
              <>
                 <section className="detail-section">
                    <div className="detail-section-title">연락처 및 등록 정보</div>
-                   <div className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12 }}>
+                   <div className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--border)' }}>
                       <div className="detail-row"><span className="detail-label">휴대전화</span><span className="detail-value">{student.phone || '-'}</span></div>
                       <div className="detail-row"><span className="detail-label">가입 일자</span><span className="detail-value">{student.joined_at || '-'}</span></div>
                       <div className="detail-row"><span className="detail-label">현재 상태</span><span className={`badge badge-${student.status}`}>{student.status}</span></div>
@@ -114,7 +114,7 @@ export default function StudentDetailPanel({
                 </section>
                 <section className="detail-section">
                    <div className="detail-section-title">학생 관리 비고</div>
-                   <div className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, fontSize: 13 }}>
+                   <div className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, fontSize: 13, border: '1px solid var(--border)' }}>
                       <div className="markdown-body"><ReactMarkdown>{student.note || '기록된 메모가 없습니다.'}</ReactMarkdown></div>
                    </div>
                 </section>
@@ -130,14 +130,14 @@ export default function StudentDetailPanel({
                 {student.project_scores.map(score => {
                    const proj = projects.find(p => p.id === score.project_id);
                    return (
-                     <div key={`ps-${score.id}`} className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12 }}>
+                     <div key={`ps-${score.id}`} className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--border)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                            <span style={{ fontSize: 14, fontWeight: 700 }}>{proj?.name}</span>
                            <span style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)' }}>{(Number(score.team_score || score.average_score || 0)).toFixed(1)}</span>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                            {proj?.score_categories.map(cat => (
-                             <div key={`cat-student-${cat.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div key={`cat-st-${cat.id || cat.label}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{cat.label}</span>
                                 <StarRating value={Number(score.category_scores?.[cat.id] || 0)} readonly size={11} />
                              </div>
@@ -156,15 +156,15 @@ export default function StudentDetailPanel({
                 </button>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                    {studentTimeline.map((c: any) => (
-                     <div key={`hist-feed-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}` }}>
+                     <div key={`hist-item-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}`, background: 'var(--bg-elevated)', padding: 12, borderRadius: 8 }}>
                         <div className="consult-meta">
                            <span className="badge">{c.type}</span>
                            <span>{formatShortDate(c.date)}</span>
                            <span style={{ fontWeight: 700 }}>{c.isTeam ? `👥 ${c.team_name}` : '👤 개인 피드백'}</span>
                            {!c.isTeam && (
                              <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                               <button onClick={() => { setEditingCons(c); setShowConsModal(true); }} style={{ padding: 2, background: 'none', border: 'none', color: 'var(--text-muted)' }}><Edit3 size={12} /></button>
-                               <button onClick={() => deleteConsultation(c.id)} style={{ padding: 2, background: 'none', border: 'none', color: 'var(--red)', opacity: 0.6 }}><Trash2 size={12} /></button>
+                               <button onClick={(e) => { e.stopPropagation(); setEditingCons(c); setShowConsModal(true); }} style={{ padding: 2, background: 'none', border: 'none', color: 'var(--text-muted)' }}><Edit3 size={12} /></button>
+                               <button onClick={(e) => { e.stopPropagation(); deleteConsultation(c.id); }} style={{ padding: 2, background: 'none', border: 'none', color: 'var(--red)', opacity: 0.6 }}><Trash2 size={12} /></button>
                              </div>
                            )}
                         </div>
