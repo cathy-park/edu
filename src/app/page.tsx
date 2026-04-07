@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { format, startOfWeek, endOfWeek, isWithinInterval, differenceInDays, isSameDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { Users, GraduationCap, MessageSquare, Check, X, Pencil, Plus, Trash2, Clock, Calendar as CalIcon, Layout, Target, Activity } from 'lucide-react';
+import { Users, GraduationCap, MessageSquare, Check, X, Pencil, Plus, Trash2, Clock, Calendar as CalIcon, Layout, Target, Activity, Rocket } from 'lucide-react';
 import DashboardCalendar from '@/components/dashboard/DashboardCalendar';
 import TodoList from '@/components/dashboard/TodoList';
 import WorkTaskSection from '@/components/dashboard/WorkTaskSection';
@@ -84,12 +84,7 @@ export default function DashboardPage() {
     }).length;
   }, [selectedCohort, consultations, students]);
 
-  // Fix v8.33 build error: Use teams for progress calculation
-  const averageProgressPct = useMemo(() => {
-     if (teams.length === 0) return 0;
-     const total = teams.reduce((acc, t) => acc + (t.progress_pct || 0), 0);
-     return Math.round(total / teams.length);
-  }, [teams]);
+  const ongoingProjectsCount = useMemo(() => projects.length, [projects]);
 
   const calendarSchedules = useMemo(() => {
     const projectSchedules = projects.map(p => {
@@ -119,11 +114,10 @@ export default function DashboardPage() {
 
   return (
     <div className="page-wrapper">
-      {/* Header */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
         <div style={{ flex: 1 }}>
            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 26, fontWeight: 900 }}>{greeting}, {instructorName}님 👋</div>
-           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>v8.33 Balanced UI</span></div>
+           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>v8.34 Nav Fix</span></div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
            {showAddCohort ? (
@@ -156,7 +150,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stats Cards - v8.33 Idea: 3 Boxes for Perfect Balance */}
       <div className="stat-cards-grid" style={{ marginBottom: 32 }}>
         <div className="stat-card" onClick={() => router.push('/students')} style={{ cursor: 'pointer' }}>
           <div className="stat-card-content"><div className="stat-card-label">전체 수강생</div><div className="stat-card-value">{totalStudentsCount}명</div></div>
@@ -167,12 +160,11 @@ export default function DashboardPage() {
           <div className="stat-card-icon" style={{ background: 'rgba(16,185,129,0.1)' }}><MessageSquare size={20} color="#10b981" /></div>
         </div>
         <div className="stat-card" onClick={() => router.push('/projects')} style={{ cursor: 'pointer' }}>
-          <div className="stat-card-content"><div className="stat-card-label">팀별 프로젝트 진척도</div><div className="stat-card-value">{averageProgressPct}%</div></div>
-          <div className="stat-card-icon" style={{ background: 'rgba(59,130,246,0.1)' }}><Activity size={20} color="#3b82f6" /></div>
+          <div className="stat-card-content"><div className="stat-card-label">진행 중 프로젝트</div><div className="stat-card-value">{ongoingProjectsCount}개</div></div>
+          <div className="stat-card-icon" style={{ background: 'rgba(59,130,246,0.1)' }}><Rocket size={20} color="#3b82f6" /></div>
         </div>
       </div>
 
-      {/* D-Day Widget - v8.33 Repositioned above Calendar */}
       <div style={{ marginBottom: 12 }}>
          <div style={{ fontSize: 13, fontWeight: 900, marginBottom: 16, color: 'var(--text-primary)', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Target size={18} color="var(--accent)" /> 현재 마감 임박 프로젝트 (D-Day)
