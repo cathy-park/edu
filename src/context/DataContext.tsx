@@ -146,11 +146,19 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       });
 
       if (studentsData) {
-        const mappedStudents = studentsData.map((s: any) => ({
-          ...s,
-          cohort: s.cohorts, // Map plural DB name to singular App property
-          project_scores: s.grades || []
-        }));
+        const mappedStudents = studentsData.map((s: any) => {
+          const scores = s.grades || [];
+          const totalAvg = scores.length > 0 
+            ? scores.reduce((acc: number, cur: any) => acc + (cur.team_score || cur.average_score || 0), 0) / scores.length 
+            : 0;
+
+          return {
+            ...s,
+            cohort: s.cohorts, // Map plural DB name to singular App property
+            project_scores: scores,
+            gpa: totalAvg
+          };
+        });
         setStudents(mappedStudents);
       }
       if (projectsData) setProjects(projectsData);

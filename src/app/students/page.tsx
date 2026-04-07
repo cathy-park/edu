@@ -21,7 +21,7 @@ function getTagClass(tag: string) {
 }
 
 function GpaCell({ gpa }: { gpa?: number }) {
-  if (!gpa) return <span style={{ color: 'var(--text-muted)' }}>-</span>;
+  if (gpa === undefined || gpa === null || gpa <= 0) return <span style={{ color: 'var(--text-muted)' }}>-</span>;
   const cls = gpa >= 3.5 ? 'gpa-high' : gpa >= 2.5 ? 'gpa-mid' : 'gpa-low';
   return <span className={cls}>{gpa.toFixed(1)}</span>;
 }
