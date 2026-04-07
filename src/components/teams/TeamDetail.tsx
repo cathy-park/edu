@@ -89,36 +89,41 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   const handleLogSubmit = async () => {
     if (!logForm.content.trim() || logForm.student_id === 0) return toast.error('내용과 수강생을 선택하세요');
     
-    if (editingLog) {
-      await updateConsultation(editingLog.id, {
-        content: logForm.content,
-        consulted_at: logForm.date,
-        type: logForm.type,
-        student_id: logForm.student_id
-      });
-      toast.success('로그가 수정되었습니다');
-    } else {
-      if (logForm.student_id === -1) {
-        for (const m of members) {
+    try {
+      if (editingLog) {
+        await updateConsultation(editingLog.id, {
+          content: logForm.content,
+          consulted_at: logForm.date,
+          type: logForm.type,
+          student_id: logForm.student_id
+        });
+        toast.success('로그가 수정되었습니다');
+      } else {
+        if (logForm.student_id === -1) {
+          for (const m of members) {
+            await addConsultation({
+              student_id: m.student_id,
+              project_id: team.project_id,
+              content: logForm.content,
+              consulted_at: logForm.date,
+              type: logForm.type
+            });
+          }
+          toast.success(`팀원 전체(${members.length}명)에게 로그가 기록되었습니다`);
+        } else {
           await addConsultation({
-            student_id: m.student_id,
+            student_id: logForm.student_id,
             project_id: team.project_id,
             content: logForm.content,
             consulted_at: logForm.date,
             type: logForm.type
           });
+          toast.success('활동 로그가 추가되었습니다');
         }
-        toast.success(`팀원 전체(${members.length}명)에게 로그가 기록되었습니다`);
-      } else {
-        await addConsultation({
-          student_id: logForm.student_id,
-          project_id: team.project_id,
-          content: logForm.content,
-          consulted_at: logForm.date,
-          type: logForm.type
-        });
-        toast.success('활동 로그가 추가되었습니다');
       }
+    } catch (err) {
+      // Error is handled in DataContext and rethrown
+      return;
     }
     setShowLogModal(false);
   };

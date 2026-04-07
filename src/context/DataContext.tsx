@@ -419,13 +419,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         .select()
         .single();
 
-      if (error) throw error;
+      if (error) {
+        console.error('Supabase Consultation Insert Error:', error.message, error.details);
+        throw error;
+      }
       
       setConsultations(prev => [data, ...prev]);
-      toast.success('활동 로그가 저장되었습니다.');
     } catch (error: any) {
-      console.error('Add Consultation Failure:', error);
-      toast.error(`로그 저장 실패: ${error.message || '알 수 없는 오류'}`);
+      console.error('Failed to add consultation:', error);
+      toast.error(`로그 저장 오류: ${error.message || '알 수 없는 오류'}`);
+      throw error; // Rethrow to let caller know
     }
   };
 
@@ -544,6 +547,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     
     const { id: _, created_at: __, ...updateFields } = sanitized as any;
 
+    // Normalize date strings for PostgreSQL 'date' type
+    if (updateFields.start_date) updateFields.start_date = updateFields.start_date.split('T')[0];
+    if (updateFields.end_date) updateFields.end_date = updateFields.end_date.split('T')[0];
+
     const { data: updateData, error: updateError } = await supabase
       .from('projects')
       .update(updateFields)
@@ -552,31 +559,44 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle();
     
     if (updateError) {
-      console.error('Update project error:', updateError);
+      console.error('Update project error:', updateError.message, updateError.details);
       toast.error('프로젝트 수정 실패: ' + updateError.message);
       return;
     }
     
-    setProjects(prev => prev.map(proj => proj.id === id ? updateData : proj));
+    if (updateData) {
+      setProjects(prev => prev.map(proj => proj.id === id ? updateData : proj));
+    } else {
+       console.warn('Update project returned no data, using optimistic update');
+       setProjects(prev => prev.map(proj => proj.id === id ? { ...proj, ...updateFields } : proj));
+    }
 
     // Synchronize Calendar
     if (oldProject && (p.start_date !== undefined || p.end_date !== undefined || p.name !== undefined)) {
-      const schedule = schedules.find(s => s.title === `[프로젝트] ${oldProject.name}`);
-      const newTitle = p.name ? `[프로젝트] ${p.name}` : `[프로젝트] ${oldProject.name}`;
+      // Use more flexible lookup for the project schedule
+      const schedule = schedules.find(s => 
+        s.title === `[프로젝트] ${oldProject.name}` || 
+        s.title.includes(oldProject.name) && s.title.includes('[프로젝트]')
+      );
+      
+      const newTitle = p.name ? `[프로젝트] ${p.name}` : schedule?.title || `[프로젝트] ${oldProject.name}`;
       const newStart = p.start_date !== undefined ? (p.start_date || '') : (oldProject.start_date || '');
       const newEnd = p.end_date !== undefined ? (p.end_date || '') : (oldProject.end_date || '');
+
+      const normalizedStart = newStart.split('T')[0];
+      const normalizedEnd = newEnd.split('T')[0];
 
       if (schedule) {
         await updateSchedule(schedule.id, {
           title: newTitle,
-          start_date: newStart,
-          end_date: newEnd
+          start_date: normalizedStart,
+          end_date: normalizedEnd
         });
-      } else if (newStart && newEnd) {
+      } else if (normalizedStart && normalizedEnd) {
         await addSchedule({
           title: newTitle,
-          start_date: newStart,
-          end_date: newEnd,
+          start_date: normalizedStart,
+          end_date: normalizedEnd,
           is_dday: false,
           category: '팀활동',
           cohort_id: oldProject.cohort_id,
@@ -584,7 +604,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       }
     }
-    toast.success('프로젝트가 동기화되었습니다.');
+    toast.success('프로젝트가 수정되었습니다.');
   };
 
   const addStage = (stage: string) => {
