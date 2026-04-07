@@ -403,15 +403,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       }
 
       const payload = {
-        student_id: c.student_id,
-        project_id: c.project_id || null,
+        student_id: Number(c.student_id),
+        project_id: c.project_id ? Number(c.project_id) : null,
         consulted_at: c.consulted_at && c.consulted_at.includes('T') 
-          ? c.consulted_at 
-          : new Date(c.consulted_at || Date.now()).toISOString(),
+          ? c.consulted_at.split('.')[0] // Remove milliseconds if any
+          : new Date(c.consulted_at || Date.now()).toISOString().split('.')[0],
         type: c.type || '기타',
         content: c.content || '',
         follow_up: c.follow_up || ''
       };
+
+      console.log('Inserting consultation with payload:', payload);
 
       const { data, error } = await supabase
         .from('consultations')
@@ -420,7 +422,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         .single();
 
       if (error) {
-        console.error('Supabase Consultation Insert Error:', error.message, error.details);
+        console.error('Supabase Consultation Insert Error:', error.code, error.message, error.details);
+        if (error.code === 'PGRST204') {
+          toast.error('데이터베이스 스키마 불일치 오류(project_id 컬럼 없음). 제공된 SQL을 실행해 주세요.');
+        }
         throw error;
       }
       
@@ -547,9 +552,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     
     const { id: _, created_at: __, ...updateFields } = sanitized as any;
 
-    // Normalize date strings for PostgreSQL 'date' type
-    if (updateFields.start_date) updateFields.start_date = updateFields.start_date.split('T')[0];
-    if (updateFields.end_date) updateFields.end_date = updateFields.end_date.split('T')[0];
+    // Normalize date strings for PostgreSQL 'date' type (ensure YYYY-MM-DD)
+    if (updateFields.start_date) {
+      updateFields.start_date = new Date(updateFields.start_date).toISOString().split('T')[0];
+    }
+    if (updateFields.end_date) {
+      updateFields.end_date = new Date(updateFields.end_date).toISOString().split('T')[0];
+    }
+
+    console.log('Updating project with fields:', updateFields);
 
     const { data: updateData, error: updateError } = await supabase
       .from('projects')
@@ -559,8 +570,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       .maybeSingle();
     
     if (updateError) {
-      console.error('Update project error:', updateError.message, updateError.details);
-      toast.error('프로젝트 수정 실패: ' + updateError.message);
+      console.error('Update project error:', updateError.code, updateError.message, updateError.details);
+      if (updateError.code === 'PGRST204') {
+        toast.error('데이터베이스 스키마 불일치 오류(start_date/end_date 컬럼 없음). 제공된 SQL을 실행해 주세요.');
+      } else {
+        toast.error('프로젝트 수정 실패: ' + updateError.message);
+      }
       return;
     }
     
