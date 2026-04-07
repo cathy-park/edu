@@ -22,10 +22,12 @@ interface Props {
   onSelectDate: (date: Date) => void;
   onUpdateProjectDate?: (id: number, start: string, end: string) => Promise<void>;
   onUpdateSchedule?: (id: number, data: Partial<Schedule>) => Promise<void>;
+  // v8.32: Support todo date updates from calendar
+  onUpdateTodoDate?: (id: number, date: string) => Promise<void>;
 }
 
 export default function DashboardCalendar({ 
-  schedules, todos, onAdd, onUpdate, onDelete, selectedDate, onSelectDate, onUpdateProjectDate, onUpdateSchedule 
+  schedules, todos, onAdd, onUpdate, onDelete, selectedDate, onSelectDate, onUpdateProjectDate, onUpdateSchedule, onUpdateTodoDate 
 }: Props) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
@@ -54,26 +56,30 @@ export default function DashboardCalendar({
     
     const dayTodos = todos.filter((t) => t.due_date && t.due_date.split('T')[0] === targetStr);
     const todoEvents = dayTodos.map(t => ({
-      id: -t.id,
+      id: -1000000 - t.id, // Offset to avoid collisions
+      realTodoId: t.id,
       title: `[할일] ${t.title}`,
       start_date: t.due_date!,
       category: 'todo' as any,
       is_dday: false,
-      is_start: true
+      is_start: true,
+      is_todo_item: true
     }));
     
-    return [...daySchedules, ...todoEvents] as (Schedule & { is_start: boolean, is_project?: boolean, originalProjectId?: number })[];
+    return [...daySchedules, ...todoEvents] as (Schedule & { is_start: boolean, is_project?: boolean, originalProjectId?: number, is_todo_item?: boolean, realTodoId?: number })[];
   };
 
-  // v8.30: Drag and Drop Logic
+  // v8.32: Handle Drag Start (Only for Todos)
   const handleDragStart = (e: React.DragEvent, event: any) => {
+    if (!event.is_todo_item) {
+       e.preventDefault();
+       return;
+    }
     e.dataTransfer.setData('text/plain', JSON.stringify({
-      id: event.id,
-      isProject: !!event.is_project,
-      originalProjectId: event.originalProjectId,
+      id: event.realTodoId,
+      isTodo: true,
       title: event.title,
-      start: event.start_date,
-      end: event.end_date || event.start_date
+      currentDate: event.start_date
     }));
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -85,17 +91,9 @@ export default function DashboardCalendar({
       if (!raw) return;
       const data = JSON.parse(raw);
       
-      const oldStart = parseISO(data.start.split('T')[0]);
-      const newStart = parseISO(targetDate);
-      const diff = differenceInDays(newStart, oldStart);
-      
-      const movedStart = format(addDays(parseISO(data.start.split('T')[0]), diff), 'yyyy-MM-dd');
-      const movedEnd = format(addDays(parseISO(data.end.split('T')[0]), diff), 'yyyy-MM-dd');
-
-      if (data.isProject && data.originalProjectId && onUpdateProjectDate) {
-        await onUpdateProjectDate(data.originalProjectId, movedStart, movedEnd);
-      } else if (!data.isProject && data.id > 0 && onUpdateSchedule) {
-        await onUpdateSchedule(data.id, { start_date: movedStart, end_date: movedEnd });
+      if (data.isTodo && onUpdateTodoDate) {
+        await onUpdateTodoDate(data.id, targetDate);
+        toast.success('할 일이 이동되었습니다');
       }
     } catch (err) {
       console.error('Drop error:', err);
@@ -152,15 +150,15 @@ export default function DashboardCalendar({
                   )}
                 </div>
                 {events.slice(0, 3).map((ev) => {
-                  const isTodo = ev.id < 0;
+                  const isTodo = ev.is_todo_item;
                   const isStart = ev.is_start;
                   const isProject = ev.is_project;
                   
                   return (
                     <div key={ev.id} 
                       className={`cal-event ev-${ev.category} ${!isStart ? 'duration-bar' : ''}`} 
-                      title={`${ev.title}\n(드래그하여 이동 가능)`}
-                      draggable={!isTodo}
+                      title={isTodo ? `${ev.title}\n(드래그하여 이동 가능)` : ev.title}
+                      draggable={isTodo}
                       onDragStart={e => handleDragStart(e, ev)}
                       onClick={(e) => { 
                         if (isTodo) return;
@@ -175,7 +173,7 @@ export default function DashboardCalendar({
                         backgroundColor: ev.color ? `${ev.color}33` : undefined,
                         borderLeftColor: ev.color || undefined,
                         color: ev.color || undefined,
-                        cursor: isTodo ? 'default' : 'move'
+                        cursor: isTodo ? 'move' : 'pointer'
                       }}>
                       {isStart && (
                         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', pointerEvents: 'none' }}>
@@ -195,9 +193,7 @@ export default function DashboardCalendar({
       {editingProject && (
         <div className="modal-overlay" onClick={() => setEditingProject(null)}>
            <div className="modal card" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
-              <div className="modal-header">
-                 <h3 className="modal-title">일정 수정 - {editingProject.title}</h3>
-              </div>
+              <div className="modal-header"><h3 className="modal-title">프로젝트 일정 수정</h3></div>
               <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                  <div className="form-field">
                     <label className="form-label">시작일</label>
@@ -215,7 +211,7 @@ export default function DashboardCalendar({
                        await onUpdateProjectDate(editingProject.id, editingProject.start, editingProject.end);
                        setEditingProject(null);
                     }
-                 }}>일정 업데이트</button>
+                 }}>저장</button>
               </div>
            </div>
         </div>

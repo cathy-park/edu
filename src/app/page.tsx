@@ -19,12 +19,10 @@ export default function DashboardPage() {
   const { 
     students, consultations, schedules, todos, projects,
     addSchedule, updateSchedule, deleteSchedule,
-    addTodo, toggleTodo, deleteTodo, updateProject
+    addTodo, toggleTodo, deleteTodo, updateProject, updateTodo
   } = useData();
   
   const [selectedDate, setSelectedDate] = useState(new Date());
-  
-  // Cohort UI states
   const [showAddCohort, setShowAddCohort] = useState(false);
   const [newCohortName, setNewCohortName] = useState('');
   const [showEditCohort, setShowEditCohort] = useState(false);
@@ -40,14 +38,6 @@ export default function DashboardPage() {
     if (saved) { setInstructorName(saved); setTempName(saved); }
   }, []);
 
-  const saveName = () => {
-    if (!tempName.trim()) { toast.error('이름을 입력해주세요'); return; }
-    setInstructorName(tempName);
-    localStorage.setItem('instructorName', tempName);
-    setIsEditingName(false);
-    toast.success('이름이 변경되었습니다');
-  };
-
   const ddayWidget = useMemo(() => {
     const today = new Date();
     today.setHours(0,0,0,0);
@@ -56,15 +46,15 @@ export default function DashboardPage() {
       .sort((a, b) => new Date(a.end_date!).getTime() - new Date(b.end_date!).getTime());
     if (activeProjects.length === 0) return null;
     return (
-      <div className="dday-hero-container" style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 12, marginBottom: 24, cursor: 'grab' }}>
+      <div className="dday-hero-container" style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 12, marginBottom: 24 }}>
         {activeProjects.map((p, idx) => {
            const diff = differenceInDays(new Date(p.end_date!), today);
            const pColor = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899'][idx % 5];
            return (
-              <div key={`dday-card-${p.id}`} className="dday-card" style={{ flexShrink: 0, background: pColor, color: 'white', padding: '16px 20px', borderRadius: 20, minWidth: 260, display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.1)' }}>
+              <div key={`dday-n-${p.id}`} className="dday-card" style={{ flexShrink: 0, background: pColor, color: 'white', padding: '16px 20px', borderRadius: 20, minWidth: 260, display: 'flex', alignItems: 'center', gap: 12, boxShadow: '0 6px 20px rgba(0,0,0,0.1)' }}>
                 <Clock size={20} />
                 <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>D-{diff === 0 ? 'Day' : diff}</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.8 }}>마감까지</div>
                   <div style={{ fontSize: 15, fontWeight: 950, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{p.name}</div>
                 </div>
                 <div style={{ fontSize: 24, fontWeight: 950 }}>D-{diff}</div>
@@ -116,6 +106,11 @@ export default function DashboardPage() {
     toast.success('일정이 이동되었습니다');
   };
 
+  const handleUpdateTodoDate = async (id: number, date: string) => {
+    await updateTodo(id, { due_date: date });
+    toast.success('할 일이 이동되었습니다');
+  };
+
   const handleAddCohort = async () => { if (!newCohortName.trim()) return; await addCohort(newCohortName); setNewCohortName(''); setShowAddCohort(false); };
   const handleEditCohort = async () => { await updateCohort(selectedCohort, editCohortName); setShowEditCohort(false); setIsConfirmingDelete(false); };
 
@@ -127,7 +122,7 @@ export default function DashboardPage() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div style={{ flex: 1 }}>
            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 26, fontWeight: 900 }}>{greeting}, {instructorName}님 👋</div>
-           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>v8.31 All Fix</span></div>
+           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>Clean Board v8.32</span></div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
            {showAddCohort ? (
@@ -159,20 +154,17 @@ export default function DashboardPage() {
            )}
         </div>
       </div>
-
       {ddayWidget}
-
       <div className="stat-cards-grid">
         <div className="stat-card" onClick={() => router.push('/students')} style={{ cursor: 'pointer' }}>
-          <div className="stat-card-content"><div className="stat-card-label">전체 수강생</div><div className="stat-card-value">{totalStudents}명</div></div>
+          <div className="stat-card-content"><div className="stat-card-label">수강생</div><div className="stat-card-value">{totalStudents}명</div></div>
           <div className="stat-card-icon" style={{ background: 'rgba(124,58,237,0.1)' }}><Users size={20} color="#8b5cf6" /></div>
         </div>
         <div className="stat-card" onClick={() => router.push('/consultations?period=this_week')} style={{ cursor: 'pointer' }}>
-          <div className="stat-card-content"><div className="stat-card-label">이번주 상담</div><div className="stat-card-value">{consultationsThisWeek}건</div></div>
+          <div className="stat-card-content"><div className="stat-card-label">금주 상담</div><div className="stat-card-value">{consultationsThisWeek}건</div></div>
           <div className="stat-card-icon" style={{ background: 'rgba(16,185,129,0.1)' }}><MessageSquare size={20} color="#10b981" /></div>
         </div>
       </div>
-
       <div className="dashboard-grid">
         <DashboardCalendar 
           schedules={calendarSchedules}
@@ -184,6 +176,7 @@ export default function DashboardPage() {
           onSelectDate={setSelectedDate}
           onUpdateProjectDate={handleUpdateProjectDate}
           onUpdateSchedule={handleUpdateSchedule}
+          onUpdateTodoDate={handleUpdateTodoDate}
         />
         <div style={{ flex: 1 }}>
           <TodoList selectedDate={selectedDate} />
