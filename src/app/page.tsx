@@ -264,7 +264,7 @@ export default function DashboardPage() {
             <div className="stat-card-label">{selectedCohort === '전체' ? '전체 수강중' : `${selectedCohort} 수강중`}</div>
             <div className="stat-card-value">{activeStudents}명</div>
           </div>
-          <div className="stat-card-icon" style={{ background: 'rgba(16,185,129,0.15)' }}>
+          <div className="stat-card-icon" style={{ background: 'rgba(10,185,129,0.15)' }}>
             <GraduationCap size={20} color="#34d399" />
           </div>
         </div>
@@ -287,6 +287,7 @@ export default function DashboardPage() {
       <div className="dashboard-grid">
         <DashboardCalendar 
           schedules={schedules}
+          todos={todos}
           onAdd={addSchedule}
           onUpdate={updateSchedule}
           onDelete={deleteSchedule}

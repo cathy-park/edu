@@ -1,6 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { isSameDay } from 'date-fns';
 import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { 
   Student, Project, Team, Consultation, ProjectScore, 
@@ -73,6 +74,8 @@ interface DataContextType {
   updateTodo: (id: number, data: Partial<Todo>) => Promise<void>;
   toggleTodo: (id: number, isDone: boolean) => Promise<void>;
   deleteTodo: (id: number) => Promise<void>;
+  
+  getEventsForDay: (date: Date) => (Schedule | { id: number; title: string; start_date: string; category: any; is_dday: boolean })[];
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -486,6 +489,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     setStages(prev => prev.filter(s => s !== stage));
   };
 
+  const getEventsForDay = (date: Date) => {
+    const daySchedules = schedules.filter((s) => isSameDay(new Date(s.start_date), date));
+    const dayTodos = todos.filter((t) => t.due_date && isSameDay(new Date(t.due_date), date));
+    
+    // Wrap todos as pseudo-schedules for UI display
+    const todoEvents = dayTodos.map(t => ({
+      id: -t.id, // Use negative ID for todos to avoid collisions with schedules
+      title: `[할일] ${t.title}`,
+      start_date: t.due_date!,
+      category: 'todo' as any,
+      is_dday: false
+    }));
+    
+    return [...daySchedules, ...todoEvents];
+  };
+
   const addWorkTask = async (task: Omit<WorkTask, 'id' | 'created_at'>) => {
     const { data, error } = await supabase.from('work_tasks').insert([task]).select().single();
     if (error) {
@@ -520,7 +539,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // Schedule CRUD
   const addSchedule = async (s: Omit<Schedule, 'id' | 'created_at'>) => {
-    const { data, error } = await supabase.from('schedules').insert([s]).select().single();
+    // Sanitize dates: convert "" to null to avoid DB errors
+    const startDate = s.start_date || null;
+    const endDate = s.end_date || null;
+    
+    if (!startDate) {
+      toast.error('시작 날짜는 필수입니다.');
+      return;
+    }
+
+    const { data, error } = await supabase.from('schedules').insert([{
+      ...s,
+      start_date: startDate,
+      end_date: endDate
+    }]).select().single();
+    
     if (error) {
       console.error('Schedule insert error:', error.message, error.details);
       toast.error(`일정 추가 실패: ${error.message}`);
@@ -604,7 +637,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       addStage, removeStage,
       addWorkTask, updateWorkTask, deleteWorkTask,
       addSchedule, updateSchedule, deleteSchedule,
-      addTodo, updateTodo, toggleTodo, deleteTodo
+      addTodo, updateTodo, toggleTodo, deleteTodo,
+      getEventsForDay
     }}>
       {children}
     </DataContext.Provider>

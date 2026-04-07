@@ -7,11 +7,12 @@ import {
 } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
-import { Schedule } from '@/lib/types';
+import { Schedule, Todo } from '@/lib/types';
 import ScheduleModal from './ScheduleModal';
 
 interface Props {
   schedules: Schedule[];
+  todos: Todo[];
   onAdd: (data: Omit<Schedule, 'id' | 'created_at'>) => void;
   onUpdate: (id: number, data: Omit<Schedule, 'id' | 'created_at'>) => void;
   onDelete: (id: number) => void;
@@ -20,7 +21,7 @@ interface Props {
 }
 
 export default function DashboardCalendar({ 
-  schedules, onAdd, onUpdate, onDelete, selectedDate, onSelectDate 
+  schedules, todos, onAdd, onUpdate, onDelete, selectedDate, onSelectDate 
 }: Props) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
@@ -35,8 +36,21 @@ export default function DashboardCalendar({
   let d = startDate;
   while (d <= endDate) { days.push(d); d = addDays(d, 1); }
 
-  const getEventsForDay = (date: Date) =>
-    schedules.filter((s) => isSameDay(new Date(s.start_date), date));
+  const getEventsForDay = (date: Date) => {
+    const daySchedules = schedules.filter((s) => isSameDay(new Date(s.start_date), date));
+    const dayTodos = todos.filter((t) => t.due_date && isSameDay(new Date(t.due_date), date));
+    
+    // Wrap todos as pseudo-schedules for UI display
+    const todoEvents = dayTodos.map(t => ({
+      id: -t.id, // Marker for todo
+      title: `[할일] ${t.title}`,
+      start_date: t.due_date!,
+      category: 'todo' as any,
+      is_dday: false
+    }));
+    
+    return [...daySchedules, ...todoEvents] as (Schedule | typeof todoEvents[0])[];
+  };
 
   const ddayItems = schedules
     .filter((s) => s.is_dday)
@@ -131,21 +145,30 @@ export default function DashboardCalendar({
                     </button>
                   )}
                 </div>
-                {events.slice(0, 2).map((ev) =>
-                  ev.is_dday ? (
+                {events.slice(0, 2).map((ev) => {
+                  const isTodo = ev.id < 0;
+                  return ev.is_dday ? (
                     <div key={ev.id} className="dday-chip" title={ev.title}
-                      onClick={(e) => { e.stopPropagation(); setModal({ mode: 'edit', schedule: ev }); }}
-                      style={{ cursor: 'pointer' }}>
+                      onClick={(e) => { 
+                        if (isTodo) return;
+                        e.stopPropagation(); 
+                        setModal({ mode: 'edit', schedule: ev as Schedule }); 
+                      }}
+                      style={{ cursor: isTodo ? 'default' : 'pointer' }}>
                       {ev.title}
                     </div>
                   ) : (
                     <div key={ev.id} className={`cal-event ev-${ev.category}`} title={ev.title}
-                      onClick={(e) => { e.stopPropagation(); setModal({ mode: 'edit', schedule: ev }); }}
-                      style={{ cursor: 'pointer' }}>
+                      onClick={(e) => { 
+                        if (isTodo) return;
+                        e.stopPropagation(); 
+                        setModal({ mode: 'edit', schedule: ev as Schedule }); 
+                      }}
+                      style={{ cursor: isTodo ? 'default' : 'pointer' }}>
                       {ev.title}
                     </div>
-                  )
-                )}
+                  );
+                })}
                 {events.length > 2 && (
                   <div style={{ fontSize: 10, color: 'var(--text-muted)', paddingLeft: 2 }}>
                     +{events.length - 2}
@@ -161,6 +184,12 @@ export default function DashboardCalendar({
         .cal-cell.selected {
           border: 1.5px solid var(--accent);
           background: var(--accent-light);
+        }
+        .cal-event.ev-todo {
+          background: rgba(124, 58, 237, 0.1);
+          color: var(--accent);
+          border-left: 3px solid var(--accent);
+          font-weight: 600;
         }
       `}</style>
 
