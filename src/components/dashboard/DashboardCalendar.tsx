@@ -1,0 +1,179 @@
+'use client';
+
+import { useState } from 'react';
+import {
+  format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
+  addDays, addMonths, subMonths, isSameMonth, isToday, isSameDay,
+} from 'date-fns';
+import { ko } from 'date-fns/locale';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { Schedule } from '@/lib/types';
+import ScheduleModal from './ScheduleModal';
+
+interface Props {
+  schedules: Schedule[];
+  onAdd: (data: Omit<Schedule, 'id' | 'created_at'>) => void;
+  onUpdate: (id: number, data: Omit<Schedule, 'id' | 'created_at'>) => void;
+  onDelete: (id: number) => void;
+  selectedDate: Date;
+  onSelectDate: (date: Date) => void;
+}
+
+export default function DashboardCalendar({ 
+  schedules, onAdd, onUpdate, onDelete, selectedDate, onSelectDate 
+}: Props) {
+  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [hoveredDay, setHoveredDay] = useState<string | null>(null);
+  const [modal, setModal] = useState<{ mode: 'add'; date: string } | { mode: 'edit'; schedule: Schedule } | null>(null);
+
+  const monthStart = startOfMonth(currentMonth);
+  const monthEnd = endOfMonth(currentMonth);
+  const startDate = startOfWeek(monthStart, { weekStartsOn: 1 });
+  const endDate = endOfWeek(monthEnd, { weekStartsOn: 1 });
+
+  const days: Date[] = [];
+  let d = startDate;
+  while (d <= endDate) { days.push(d); d = addDays(d, 1); }
+
+  const getEventsForDay = (date: Date) =>
+    schedules.filter((s) => isSameDay(new Date(s.start_date), date));
+
+  const ddayItems = schedules
+    .filter((s) => s.is_dday)
+    .map((s) => {
+      const diff = Math.ceil((new Date(s.start_date).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000);
+      return { ...s, diff };
+    })
+    .filter((s) => s.diff >= 0)
+    .sort((a, b) => a.diff - b.diff)
+    .slice(0, 4);
+
+  const handleSave = (data: Omit<Schedule, 'id' | 'created_at'>) => {
+    if (modal?.mode === 'edit') {
+      onUpdate(modal.schedule.id, data);
+    } else {
+      onAdd(data);
+    }
+    setModal(null);
+  };
+
+  const handleDelete = (id: number) => {
+    onDelete(id);
+    setModal(null);
+  };
+
+  const dayLabels = ['월', '화', '수', '목', '금', '토', '일'];
+
+  return (
+    <div>
+      {/* D-Day Strip */}
+      {ddayItems.length > 0 && (
+        <div className="dday-strip">
+          {ddayItems.map((item) => (
+            <div key={item.id} className="dday-item" style={{ cursor: 'pointer' }}
+              onClick={() => setModal({ mode: 'edit', schedule: item })}>
+              <span className="dday-label">{item.diff === 0 ? 'D-Day' : `D-${item.diff}`}</span>
+              <span className="dday-title">{item.title}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Calendar */}
+      <div className="card">
+        <div className="cal-header">
+          <button className="cal-nav" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
+            <ChevronLeft size={16} />
+          </button>
+          <span className="cal-title">{format(currentMonth, 'yyyy년 M월', { locale: ko })}</span>
+          <button className="cal-nav" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
+            <ChevronRight size={16} />
+          </button>
+        </div>
+
+        <div className="cal-grid">
+          {dayLabels.map((label, i) => (
+            <div key={label} className={`cal-day-label ${i === 6 ? 'sun' : ''}`}>{label}</div>
+          ))}
+
+          {days.map((day, idx) => {
+            const events = getEventsForDay(day);
+            const isSun = day.getDay() === 0;
+            const isOther = !isSameMonth(day, currentMonth);
+            const dateStr = format(day, 'yyyy-MM-dd');
+            const isHovered = hoveredDay === dateStr;
+            const isSelected = isSameDay(day, selectedDate);
+
+            return (
+              <div
+                key={idx}
+                className={`cal-cell${isToday(day) ? ' today' : ''}${isOther ? ' other-month' : ''}${isSun ? ' sun' : ''}${isSelected ? ' selected' : ''}`}
+                onMouseEnter={() => setHoveredDay(dateStr)}
+                onMouseLeave={() => setHoveredDay(null)}
+                onClick={() => onSelectDate(day)}
+                style={{ position: 'relative', cursor: 'pointer' }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
+                  <div className="cal-num">{format(day, 'd')}</div>
+                  {(isHovered || isSelected) && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); setModal({ mode: 'add', date: dateStr }); }}
+                      style={{
+                        width: 16, height: 16, borderRadius: 4,
+                        background: 'var(--accent)', border: 'none', cursor: 'pointer',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        flexShrink: 0,
+                        zIndex: 2
+                      }}
+                      title="일정 추가"
+                    >
+                      <Plus size={10} color="white" />
+                    </button>
+                  )}
+                </div>
+                {events.slice(0, 2).map((ev) =>
+                  ev.is_dday ? (
+                    <div key={ev.id} className="dday-chip" title={ev.title}
+                      onClick={(e) => { e.stopPropagation(); setModal({ mode: 'edit', schedule: ev }); }}
+                      style={{ cursor: 'pointer' }}>
+                      {ev.title}
+                    </div>
+                  ) : (
+                    <div key={ev.id} className={`cal-event ev-${ev.category}`} title={ev.title}
+                      onClick={(e) => { e.stopPropagation(); setModal({ mode: 'edit', schedule: ev }); }}
+                      style={{ cursor: 'pointer' }}>
+                      {ev.title}
+                    </div>
+                  )
+                )}
+                {events.length > 2 && (
+                  <div style={{ fontSize: 10, color: 'var(--text-muted)', paddingLeft: 2 }}>
+                    +{events.length - 2}
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      <style jsx global>{`
+        .cal-cell.selected {
+          border: 1.5px solid var(--accent);
+          background: var(--accent-light);
+        }
+      `}</style>
+
+      {/* Modal */}
+      {modal && (
+        <ScheduleModal
+          schedule={modal.mode === 'edit' ? modal.schedule : null}
+          defaultDate={modal.mode === 'add' ? modal.date : undefined}
+          onClose={() => setModal(null)}
+          onSave={handleSave}
+          onDelete={handleDelete}
+        />
+      )}
+    </div>
+  );
+}
