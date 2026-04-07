@@ -46,6 +46,9 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
   const [categoryScores, setCategoryScores] = useState<Record<string, number>>({});
 
+  // Fix 1: Consistent Key Generation for Score Isolation
+  const getCatKey = (cat: any, idx: number) => cat.id || `idx-${idx}`;
+
   useEffect(() => {
     if (members.length > 0) {
       const firstMember = students.find(s => s.id === members[0].student_id);
@@ -68,9 +71,14 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     }
   }, [logForm.student_id]);
 
+  // Fix 1-b: Compute average using the SAME key logic
   const overallScore = useMemo(() => {
     if (!project?.score_categories || project.score_categories.length === 0) return 0;
-    const total = project.score_categories.reduce((acc, cat) => acc + Number(categoryScores[cat.id] || 0), 0);
+    const total = project.score_categories.reduce((acc, cat, idx) => {
+      const key = getCatKey(cat, idx);
+      const val = Number(categoryScores[key] || 0);
+      return acc + val;
+    }, 0);
     const avg = total / project.score_categories.length;
     return Math.round(avg * 10) / 10;
   }, [categoryScores, project]);
@@ -99,6 +107,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         toast.success('기록이 수정되었습니다');
       } else {
         if (Number(logForm.student_id) === -1) {
+          // Fix 3: Ensure team_id is strictly passed
           await addProjectLog({ team_id: team.id, log_date: logForm.date, type: logForm.type as any, content: logForm.content, title: logForm.type });
           toast.success('팀 활동 로그가 추가되었습니다');
         } else {
@@ -121,14 +130,14 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     return [...individualLogs, ...teamLogs].sort((a, b) => b.date.localeCompare(a.date));
   }, [consultations, projectLogs, members, team.id, team.project_id]);
 
-  // Aggressive Date Formatting
+  // Fix 2: Foolproof Date Format YYYY-MM-DD HH:mm
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
     try {
-      // 2026-04-07T20:01:00+00:00 -> 2026-04-07 20:01
-      const base = dateStr.replace('T', ' ').split('.')[0];
-      const clean = base.replace(/(\+\d{2}:\d{2}|Z)$/, '').trim();
-      return clean.slice(0, 16);
+      // Input: 2026-04-08T00:00:00+00:00 or 2026-04-08 20:01
+      const dateOnly = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.split(' ')[0];
+      const timeOnly = dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : dateStr.split(' ')[1]?.slice(0, 5) || '00:00';
+      return `${dateOnly} ${timeOnly}`;
     } catch {
       return dateStr.slice(0, 16).replace('T', ' ');
     }
@@ -142,7 +151,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--text-primary)' }}><X size={24} /></button>
           <div className="detail-avatar">{team.team_name[0]}</div>
           <div>
-            <h2 style={{ fontSize: 20, margin: 0 }}>{team.team_name} <small style={{fontSize: 10, opacity: 0.3}}>v8.24 (Final)</small></h2>
+            <h2 style={{ fontSize: 20, margin: 0 }}>{team.team_name} <small style={{fontSize: 10, opacity: 0.3}}>v8.25</small></h2>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{project?.name}</div>
           </div>
         </div>
@@ -176,7 +185,6 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                       </div>
                    </div>
                 </section>
-
                 <section className="detail-section">
                    <div className="detail-section-title">팀 플레이어 ({members.length})</div>
                    <div className="card" style={{ padding: 0, background: 'var(--bg-elevated)', borderRadius: 12, overflow: 'hidden', border: '1px solid var(--border)' }}>
@@ -205,7 +213,6 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                             })}
                          </tbody>
                       </table>
-                      <button onClick={(e) => { e.stopPropagation(); setShowMemberSelector(true); }} style={{ width: '100%', padding: '12px', border: 'none', background: 'var(--bg-hover)', color: 'var(--accent)', fontSize: 12, fontWeight: 700 }}>+ 새로운 팀원 초대</button>
                    </div>
                 </section>
              </>
@@ -219,12 +226,12 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                 </div>
                 <div className="card" style={{ padding: '8px 16px', background: 'var(--bg-elevated)', borderRadius: 16, border: '1px solid var(--border)' }}>
                    {project?.score_categories.map((cat, idx) => {
-                      const catId = cat.id || `idx-${idx}`;
+                      const catId = getCatKey(cat, idx);
                       return (
-                        <div key={`star-block-${team.id}-${catId}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: idx === project.score_categories.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                        <div key={`se-row-${catId}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: idx === project.score_categories.length - 1 ? 'none' : '1px solid var(--border)' }}>
                            <span style={{ fontSize: 13, fontWeight: 600 }}>{cat.label}</span>
                            <StarRating 
-                              key={`star-inst-${team.id}-${catId}-${categoryScores[catId] || 0}`}
+                              key={`star-e-${team.id}-${catId}-${categoryScores[catId] || 0}`}
                               value={Number(categoryScores[catId] || 0)} 
                               onChange={v => setCategoryScores(prev => ({ ...prev, [catId]: v }))} 
                               size={18} 
@@ -246,7 +253,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                 </button>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                    {teamTimeline.map(c => (
-                     <div key={`log-item-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}`, background: 'var(--bg-elevated)', padding: 12, borderRadius: 8 }}>
+                     <div key={`log-i-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}`, background: 'var(--bg-elevated)', padding: 12, borderRadius: 8 }}>
                         <div className="consult-meta">
                            <span className="badge">{c.type}</span>
                            <span>{formatShortDate(c.date)}</span>
@@ -287,7 +294,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
       {showLogModal && (
         <div className="modal-overlay" onClick={() => setShowLogModal(false)}>
            <div className="modal card" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
-              <div className="modal-header"><h3 className="modal-title">{editingLog ? '기록 수정' : '활동 로그 추가'}</h3></div>
+              <div className="modal-header"><h3 className="modal-title">{editingLog ? '기록 수정' : '활동 로그 가'}</h3></div>
               <div className="modal-body">
                  <div className="form-field">
                     <label className="form-label">대상</label>
@@ -295,7 +302,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                        <option value={-1}>팀 전체</option>
                        {members.map(m => {
                          const s = students.find(std => std.id === m.student_id);
-                         return s ? <option key={`opt-log-${m.id}`} value={s.id}>{s.name} (개인)</option> : null;
+                         return s ? <option key={`log-opt-${m.id}`} value={s.id}>{s.name} (개인)</option> : null;
                        })}
                     </select>
                  </div>

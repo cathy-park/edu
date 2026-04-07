@@ -40,8 +40,10 @@ export default function StudentDetailPanel({
       .filter(c => Number(c.student_id) === Number(currentStudentId))
       .map(c => ({ ...c, isTeam: false, date: c.consulted_at }));
     const myTeamIds = teamMembers.filter(tm => Number(tm.student_id) === Number(currentStudentId)).map(tm => tm.team_id);
+    
+    // Fix 3: Robust Team Name Mapping
     const teamInLogs = projectLogs.filter(pl => myTeamIds.includes(pl.team_id)).map(pl => {
-      const t = teams.find(team => team.id === pl.team_id);
+      const t = teams.find(team => Number(team.id) === Number(pl.team_id));
       return { 
         ...pl, isTeam: true, date: pl.log_date, student_id: currentStudentId, consulted_at: pl.log_date,
         type: pl.type || '회의록', team_name: t?.team_name || '소속 팀'
@@ -64,13 +66,13 @@ export default function StudentDetailPanel({
     } catch (error) {}
   };
 
+  // Fix 2: Foolproof Date Format YYYY-MM-DD HH:mm
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
     try {
-      // 2026-04-07T20:01:00+00:00 -> 2026-04-07 20:01
-      const base = dateStr.replace('T', ' ').split('.')[0];
-      const clean = base.replace(/(\+\d{2}:\d{2}|Z)$/, '').trim();
-      return clean.slice(0, 16);
+      const dateOnly = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.split(' ')[0];
+      const timeOnly = dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : dateStr.split(' ')[1]?.slice(0, 5) || '00:00';
+      return `${dateOnly} ${timeOnly}`;
     } catch {
       return dateStr.slice(0, 16).replace('T', ' ');
     }
@@ -84,7 +86,7 @@ export default function StudentDetailPanel({
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--text-primary)' }}><X size={24} /></button>
           <div className="detail-avatar">{student.name[0]}</div>
           <div>
-            <h2 style={{ fontSize: 20, margin: 0 }}>{student.name} <small style={{fontSize: 10, opacity: 0.3}}>v8.24 (Final)</small></h2>
+            <h2 style={{ fontSize: 20, margin: 0 }}>{student.name} <small style={{fontSize: 10, opacity: 0.3}}>v8.25</small></h2>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{student.cohort?.name} · {student.email}</div>
           </div>
         </div>
@@ -130,14 +132,14 @@ export default function StudentDetailPanel({
                 {student.project_scores.map(score => {
                    const proj = projects.find(p => p.id === score.project_id);
                    return (
-                     <div key={`ps-${score.id}`} className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--border)' }}>
+                     <div key={`ps-f-${score.id}`} className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, border: '1px solid var(--border)' }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
                            <span style={{ fontSize: 14, fontWeight: 700 }}>{proj?.name}</span>
                            <span style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)' }}>{(Number(score.team_score || score.average_score || 0)).toFixed(1)}</span>
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                           {proj?.score_categories.map(cat => (
-                             <div key={`cat-st-${cat.id || cat.label}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                           {proj?.score_categories.map((cat, ci) => (
+                             <div key={`cat-st-f-${cat.id || ci}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{cat.label}</span>
                                 <StarRating value={Number(score.category_scores?.[cat.id] || 0)} readonly size={11} />
                              </div>
@@ -156,7 +158,7 @@ export default function StudentDetailPanel({
                 </button>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                    {studentTimeline.map((c: any) => (
-                     <div key={`hist-item-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}`, background: 'var(--bg-elevated)', padding: 12, borderRadius: 8 }}>
+                     <div key={`hist-f-item-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}`, background: 'var(--bg-elevated)', padding: 12, borderRadius: 8 }}>
                         <div className="consult-meta">
                            <span className="badge">{c.type}</span>
                            <span>{formatShortDate(c.date)}</span>
