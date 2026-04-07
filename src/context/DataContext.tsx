@@ -397,26 +397,34 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addConsultation = async (c: Omit<Consultation, 'id' | 'created_at'>) => {
-    console.log('Attempting to save consultation:', c);
-    const { data, error } = await supabase.from('consultations').insert([{
-      student_id: c.student_id,
-      project_id: c.project_id || null,
-      consulted_at: c.consulted_at,
-      type: c.type,
-      content: c.content,
-      follow_up: c.follow_up || ''
-    }]).select().single();
+    try {
+      if (!c.student_id || c.student_id <= 0) {
+        throw new Error('올바른 수강생을 선택해주세요.');
+      }
 
-    if (error) {
-      console.error('Full Supabase Error (Consultation):', error);
-      console.error('Error Code:', error.code);
-      console.error('Error Message:', error.message);
-      console.error('Error Details:', error.details);
-      toast.error(`로그 저장 실패: ${error.message}`);
-      return;
+      const payload = {
+        student_id: c.student_id,
+        project_id: c.project_id || null,
+        consulted_at: c.consulted_at || new Date().toISOString(),
+        type: c.type || '기타',
+        content: c.content || '',
+        follow_up: c.follow_up || ''
+      };
+
+      const { data, error } = await supabase
+        .from('consultations')
+        .insert([payload])
+        .select()
+        .single();
+
+      if (error) throw error;
+      
+      setConsultations(prev => [data, ...prev]);
+      toast.success('활동 로그가 저장되었습니다.');
+    } catch (error: any) {
+      console.error('Add Consultation Failure:', error);
+      toast.error(`로그 저장 실패: ${error.message || '알 수 없는 오류'}`);
     }
-    setConsultations(prev => [data, ...prev]);
-    toast.success('로그가 성공적으로 저장되었습니다');
   };
 
   const updateConsultation = async (id: number, data: Partial<Consultation>) => {
@@ -481,10 +489,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const deleteProject = async (id: number) => {
+    const project = projects.find(p => p.id === id);
     const { error } = await supabase.from('projects').delete().eq('id', id);
     if (!error) {
       setProjects(prev => prev.filter(p => p.id !== id));
       setTeams(prev => prev.filter(t => t.project_id !== id));
+      
+      // Auto-remove calendar event
+      if (project) {
+        const schedule = schedules.find(s => s.title === `[프로젝트] ${project.name}`);
+        if (schedule) await deleteSchedule(schedule.id);
+      }
+      toast.success('프로젝트가 삭제되었습니다.');
     }
   };
 
@@ -498,7 +514,6 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     
     setProjects(prev => [projData, ...prev]);
     
-    // Auto-create schedule if dates are provided
     if (p.start_date && p.end_date) {
       await addSchedule({
         title: `[프로젝트] ${p.name}`,
@@ -509,19 +524,47 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         cohort_id: p.cohort_id,
         color: '#6366f1'
       });
-      toast.success('프로젝트 일정이 캘린더에 동기화되었습니다');
     }
     return projData.id;
   };
 
   const updateProject = async (id: number, p: Partial<Project>) => {
+    const oldProject = projects.find(proj => proj.id === id);
     const { data: updateData, error: updateError } = await supabase.from('projects').update(p).eq('id', id).select().single();
+    
     if (updateError) {
       console.error('Update project error:', updateError);
       toast.error('프로젝트 수정 실패');
       return;
     }
+    
     setProjects(prev => prev.map(proj => proj.id === id ? updateData : proj));
+
+    // Synchronize Calendar
+    if (oldProject && (p.start_date !== undefined || p.end_date !== undefined || p.name !== undefined)) {
+      const schedule = schedules.find(s => s.title === `[프로젝트] ${oldProject.name}`);
+      const newTitle = p.name ? `[프로젝트] ${p.name}` : `[프로젝트] ${oldProject.name}`;
+      const newStart = p.start_date !== undefined ? p.start_date : oldProject.start_date;
+      const newEnd = p.end_date !== undefined ? p.end_date : oldProject.end_date;
+
+      if (schedule) {
+        await updateSchedule(schedule.id, {
+          title: newTitle,
+          start_date: newStart || '',
+          end_date: newEnd || ''
+        });
+      } else if (newStart && newEnd) {
+        await addSchedule({
+          title: newTitle,
+          start_date: newStart,
+          end_date: newEnd,
+          is_dday: false,
+          category: '팀활동',
+          cohort_id: oldProject.cohort_id,
+          color: '#6366f1'
+        });
+      }
+    }
   };
 
   const addStage = (stage: string) => {

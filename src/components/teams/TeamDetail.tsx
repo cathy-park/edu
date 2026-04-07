@@ -284,7 +284,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                  <h4 className="s-title">평가 세부 항목</h4>
                  <div className="cats-list-entry" style={{ marginTop: 12 }}>
                     {(project?.stages || []).map((stage, idx) => {
-                      const catId = stage.toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '');
+                      const catId = stage.trim().replace(/\s+/g, '_');
                       return (
                         <div key={catId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{stage}</span>
