@@ -340,7 +340,7 @@ export default function StudentDetailPanel({
            <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
               <div className="modal-header"><h3 className="modal-title">메모 수정</h3></div>
               <div className="modal-body">
-                 <textarea className="form-input" rows={6} value={noteText} onChange={setNoteText} placeholder="내용을 입력하세요..." />
+                 <textarea className="form-input" rows={6} value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="내용을 입력하세요..." />
               </div>
               <div className="modal-footer">
                  <button className="btn btn-secondary" onClick={() => setShowNoteModal(false)}>취소</button>
