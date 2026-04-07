@@ -3,43 +3,40 @@
 import { useState } from 'react';
 import { Check, Plus, Trash2 } from 'lucide-react';
 import { Todo, TodoCategory } from '@/lib/types';
+import { useData } from '@/context/DataContext';
 import toast from 'react-hot-toast';
 import { format, isSameDay } from 'date-fns';
 import { ko } from 'date-fns/locale';
 
 interface Props {
-  todos: Todo[];
-  onChange: (todos: Todo[]) => void;
   selectedDate: Date;
 }
 
-export default function TodoList({ todos, onChange, selectedDate }: Props) {
+export default function TodoList({ selectedDate }: Props) {
+  const { todos, addTodo, toggleTodo, deleteTodo } = useData();
   const [adding, setAdding] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newCategory, setNewCategory] = useState<TodoCategory>('개인업무');
   const [newPriority, setNewPriority] = useState<'높음' | '보통' | '낮음'>('보통');
 
-  const toggle = (id: number) => {
-    onChange(todos.map((t) => (t.id === id ? { ...t, is_done: !t.is_done } : t)));
+  const handleToggle = async (id: number, currentStatus: boolean) => {
+    await toggleTodo(id, !currentStatus);
   };
 
-  const remove = (id: number) => {
-    onChange(todos.filter((t) => t.id !== id));
+  const handleRemove = async (id: number) => {
+    if (!confirm('할 일을 삭제하시겠습니까?')) return;
+    await deleteTodo(id);
     toast.success('삭제됐습니다');
   };
 
-  const addTodo = () => {
+  const handleAdd = async () => {
     if (!newTitle.trim()) { toast.error('내용을 입력해주세요'); return; }
-    const newTodo: Todo = {
-      id: Date.now(),
+    await addTodo({
       title: newTitle.trim(),
       category: newCategory,
-      is_done: false,
       priority: newPriority,
-      created_at: new Date().toISOString(),
       due_date: format(selectedDate, 'yyyy-MM-dd'),
-    };
-    onChange([...todos, newTodo]);
+    });
     setNewTitle('');
     setAdding(false);
     toast.success('할 일이 추가됐습니다');
@@ -58,7 +55,7 @@ export default function TodoList({ todos, onChange, selectedDate }: Props) {
       <div key={todo.id} className="todo-item" style={{ gap: 8 }}>
         <button
           className={`todo-checkbox ${todo.is_done ? 'checked' : ''}`}
-          onClick={() => toggle(todo.id)}
+          onClick={() => handleToggle(todo.id, todo.is_done)}
         >
           {todo.is_done && <Check size={10} color="white" strokeWidth={3} />}
         </button>
@@ -67,7 +64,7 @@ export default function TodoList({ todos, onChange, selectedDate }: Props) {
         <button
           className="action-btn danger"
           style={{ width: 24, height: 24, flexShrink: 0 }}
-          onClick={() => remove(todo.id)}
+          onClick={() => handleRemove(todo.id)}
           title="삭제"
         >
           <Trash2 size={12} />
@@ -117,7 +114,7 @@ export default function TodoList({ todos, onChange, selectedDate }: Props) {
               placeholder="무엇을 해야 하나요?"
               value={newTitle}
               onChange={(e) => setNewTitle(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && addTodo()}
+              onKeyDown={(e) => e.key === 'Enter' && handleAdd()}
               autoFocus
               style={{ background: 'var(--bg-surface)' }}
             />
@@ -133,7 +130,7 @@ export default function TodoList({ todos, onChange, selectedDate }: Props) {
               </select>
             </div>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button className="btn btn-primary" style={{ flex: 1, height: 36 }} onClick={addTodo}>추가</button>
+              <button className="btn btn-primary" style={{ flex: 1, height: 36 }} onClick={handleAdd}>추가</button>
               <button className="btn btn-secondary" style={{ flex: 1, height: 36 }} onClick={() => { setAdding(false); setNewTitle(''); }}>취소</button>
             </div>
           </div>

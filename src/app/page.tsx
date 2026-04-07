@@ -8,8 +8,6 @@ import { Users, GraduationCap, MessageSquare, Check, X, Pencil, Plus, Trash2 } f
 import DashboardCalendar from '@/components/dashboard/DashboardCalendar';
 import TodoList from '@/components/dashboard/TodoList';
 import WorkTaskSection from '@/components/dashboard/WorkTaskSection';
-import { mockSchedules, mockTodos } from '@/lib/mockData';
-import { Todo, Schedule } from '@/lib/types';
 import { useCohort } from '@/context/CohortContext';
 import { useData } from '@/context/DataContext';
 import toast from 'react-hot-toast';
@@ -17,10 +15,11 @@ import toast from 'react-hot-toast';
 export default function DashboardPage() {
   const router = useRouter();
   const { selectedCohort, setSelectedCohort, cohorts, addCohort, updateCohort, deleteCohort } = useCohort();
-  const { students, consultations } = useData();
-  
-  const [todos, setTodos] = useState<Todo[]>(mockTodos);
-  const [schedules, setSchedules] = useState<Schedule[]>(mockSchedules);
+  const { 
+    students, consultations, schedules, todos, 
+    addSchedule, updateSchedule, deleteSchedule,
+    addTodo, toggleTodo, deleteTodo 
+  } = useData();
   
   const [selectedDate, setSelectedDate] = useState(new Date());
 
@@ -79,22 +78,6 @@ export default function DashboardPage() {
   const today = new Date();
   const hour = today.getHours();
   const greeting = hour < 12 ? '좋은 아침이에요' : hour < 18 ? '좋은 오후예요' : '좋은 저녁이에요';
-
-  const handleAddSchedule = (data: Omit<Schedule, 'id' | 'created_at'>) => {
-    const newSchedule: Schedule = { ...data, id: Date.now(), created_at: new Date().toISOString() };
-    setSchedules((prev) => [...prev, newSchedule]);
-    toast.success('일정이 추가됐습니다');
-  };
-
-  const handleUpdateSchedule = (id: number, data: Omit<Schedule, 'id' | 'created_at'>) => {
-    setSchedules((prev) => prev.map((s) => (s.id === id ? { ...s, ...data } : s)));
-    toast.success('일정이 수정됐습니다');
-  };
-
-  const handleDeleteSchedule = (id: number) => {
-    setSchedules((prev) => prev.filter((s) => s.id !== id));
-    toast.success('일정이 삭제됐습니다');
-  };
 
   const handleAddCohort = async () => {
     if (!newCohortName.trim()) return;
@@ -302,19 +285,19 @@ export default function DashboardPage() {
 
       {/* Calendar + Todo Grid */}
       <div className="dashboard-grid">
-        <DashboardCalendar
+        <DashboardCalendar 
           schedules={schedules}
-          onAdd={handleAddSchedule}
-          onUpdate={handleUpdateSchedule}
-          onDelete={handleDeleteSchedule}
+          onAdd={addSchedule}
+          onUpdate={updateSchedule}
+          onDelete={deleteSchedule}
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
         />
-        <TodoList 
-          todos={todos} 
-          onChange={setTodos} 
-          selectedDate={selectedDate}
-        />
+        <div style={{ flex: 1 }}>
+          <TodoList 
+            selectedDate={selectedDate}
+          />
+        </div>
       </div>
 
       {/* NEW: Work Task / GPTs Section */}

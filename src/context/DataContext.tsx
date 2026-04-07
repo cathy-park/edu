@@ -4,7 +4,7 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { supabase } from '@/lib/supabase';
 import { 
   Student, Project, Team, Consultation, ProjectScore, 
-  TeamMember, StudentTag, WorkTask 
+  TeamMember, StudentTag, WorkTask, Todo, Schedule 
 } from '@/lib/types';
 import toast from 'react-hot-toast';
 
@@ -16,6 +16,8 @@ interface DataContextType {
   tags: StudentTag[];
   teamMembers: TeamMember[];
   workTasks: WorkTask[];
+  todos: Todo[];
+  schedules: Schedule[];
   stages: string[];
   isLoading: boolean;
   
@@ -60,6 +62,17 @@ interface DataContextType {
   addWorkTask: (task: Omit<WorkTask, 'id' | 'created_at'>) => Promise<void>;
   updateWorkTask: (id: number, data: Partial<WorkTask>) => Promise<void>;
   deleteWorkTask: (id: number) => Promise<void>;
+
+  // Schedule CRUD
+  addSchedule: (schedule: Omit<Schedule, 'id' | 'created_at'>) => Promise<void>;
+  updateSchedule: (id: number, data: Partial<Schedule>) => Promise<void>;
+  deleteSchedule: (id: number) => Promise<void>;
+
+  // Todo CRUD
+  addTodo: (todo: Omit<Todo, 'id' | 'created_at' | 'is_done'>) => Promise<void>;
+  updateTodo: (id: number, data: Partial<Todo>) => Promise<void>;
+  toggleTodo: (id: number, isDone: boolean) => Promise<void>;
+  deleteTodo: (id: number) => Promise<void>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -72,6 +85,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [tags, setTags] = useState<StudentTag[]>([]);
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [workTasks, setWorkTasks] = useState<WorkTask[]>([]);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [schedules, setSchedules] = useState<Schedule[]>([]);
   const [stages, setStages] = useState<string[]>(['기획', '디자인', '개발', '검증', '완료']);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -87,7 +102,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         { data: consultsData },
         { data: tagsData },
         { data: membersData },
-        { data: workTasksData }
+        { data: workTasksData },
+        { data: todosData },
+        { data: schedulesData }
       ] = await Promise.all([
         supabase.from('students').select('*, cohorts(*), grades(*), student_tags(*)').order('id', { ascending: false }),
         supabase.from('projects').select('*').order('id', { ascending: false }),
@@ -95,7 +112,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         supabase.from('consultations').select('*').order('id', { ascending: false }),
         supabase.from('student_tags').select('*'),
         supabase.from('team_members').select('*, students(*)'),
-        supabase.from('work_tasks').select('*').order('id', { ascending: false })
+        supabase.from('work_tasks').select('*').order('id', { ascending: false }),
+        supabase.from('todos').select('*').order('id', { ascending: false }),
+        supabase.from('schedules').select('*').order('id', { ascending: false })
       ]);
 
       if (studentsData) {
@@ -112,6 +131,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (tagsData) setTags(tagsData);
       if (membersData) setTeamMembers(membersData);
       if (workTasksData) setWorkTasks(workTasksData);
+      if (todosData) setTodos(todosData);
+      if (schedulesData) setSchedules(schedulesData);
 
     } catch (error) {
       console.error('Fetch error:', error);
@@ -461,16 +482,83 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  // Schedule CRUD
+  const addSchedule = async (s: Omit<Schedule, 'id' | 'created_at'>) => {
+    const { data, error } = await supabase.from('schedules').insert([s]).select().single();
+    if (error) {
+      toast.error('일정 추가 실패');
+    } else if (data) {
+      setSchedules(prev => [...prev, data]);
+    }
+  };
+
+  const updateSchedule = async (id: number, data: Partial<Schedule>) => {
+    const { error } = await supabase.from('schedules').update(data).eq('id', id);
+    if (error) {
+      toast.error('일정 수정 실패');
+    } else {
+      setSchedules(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+    }
+  };
+
+  const deleteSchedule = async (id: number) => {
+    const { error } = await supabase.from('schedules').delete().eq('id', id);
+    if (error) {
+      toast.error('일정 삭제 실패');
+    } else {
+      setSchedules(prev => prev.filter(s => s.id !== id));
+    }
+  };
+
+  // Todo CRUD
+  const addTodo = async (todo: Omit<Todo, 'id' | 'created_at' | 'is_done'>) => {
+    const { data, error } = await supabase.from('todos').insert([{ ...todo, is_done: false }]).select().single();
+    if (error) {
+      toast.error('할 일 추가 실패');
+    } else if (data) {
+      setTodos(prev => [data, ...prev]);
+    }
+  };
+
+  const updateTodo = async (id: number, data: Partial<Todo>) => {
+    const { error } = await supabase.from('todos').update(data).eq('id', id);
+    if (error) {
+      toast.error('할 일 수정 실패');
+    } else {
+      setTodos(prev => prev.map(t => t.id === id ? { ...t, ...data } : t));
+    }
+  };
+
+  const toggleTodo = async (id: number, isDone: boolean) => {
+    const { error } = await supabase.from('todos').update({ is_done: isDone }).eq('id', id);
+    if (error) {
+      toast.error('상태 변경 실패');
+    } else {
+      setTodos(prev => prev.map(t => t.id === id ? { ...t, is_done: isDone } : t));
+    }
+  };
+
+  const deleteTodo = async (id: number) => {
+    const { error } = await supabase.from('todos').delete().eq('id', id);
+    if (error) {
+      toast.error('할 일 삭제 실패');
+    } else {
+      setTodos(prev => prev.filter(t => t.id !== id));
+    }
+  };
+
   return (
     <DataContext.Provider value={{ 
-      students, projects, teams, consultations, tags, teamMembers, workTasks, stages, isLoading,
+      students, projects, teams, consultations, tags, teamMembers, workTasks, todos, schedules, stages, isLoading,
       addStudent, updateStudent, deleteStudent, updateStudentTags,
       addTeam, updateTeam, deleteTeam, addTeamMember, removeTeamMember,
       updateProjectScore, addConsultation, updateConsultation, deleteConsultation, 
       updateTeamProgress, updateTeamScore,
       addProjectCategory, deleteProjectCategory, deleteProject, updateProject, addProject,
       addStage, removeStage,
-      addWorkTask, updateWorkTask, deleteWorkTask
+      addWorkTask, updateWorkTask, deleteWorkTask,
+      addSchedule, updateSchedule, deleteSchedule,
+      addTodo, updateTodo, toggleTodo, deleteTodo
     }}>
       {children}
     </DataContext.Provider>
