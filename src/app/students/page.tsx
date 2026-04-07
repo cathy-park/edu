@@ -187,7 +187,10 @@ export default function StudentsPage() {
                   <tr key={s.id} onClick={() => setSelected(s)}>
                     <td className="td-name">{s.name}</td>
                     <td className="td-muted">{s.cohort?.name ?? '-'}</td>
-                    <td className="td-muted">{s.experience || '비전공자'}</td>
+                     <td className="td-muted">
+                       {s.experience || '비전공자'}
+                       {s.experience_detail ? ` (${s.experience_detail})` : ''}
+                     </td>
                     <td className="td-muted">{s.age ? `${s.age}세` : '-'}</td>
                     <td className="td-muted">{s.phone ?? '-'}</td>
                     <td><span className={`badge badge-${s.status}`}>{s.status}</span></td>

@@ -37,6 +37,7 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
     cohort_id: defaultCohortId,
     status: (student?.status ?? '수강중') as StudentStatus,
     experience: student?.experience ?? '비전공자',
+    experience_detail: student?.experience_detail ?? '',
     note: student?.note ?? '',
   });
 
@@ -76,6 +77,7 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
       cohort_id: finalCohortId,
       status: form.status,
       experience: form.experience,
+      experience_detail: form.experience_detail,
       note: form.note,
       inputTags: tags,
     });
@@ -97,11 +99,14 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
               <label className="form-label">이름 *</label>
               <input className="form-input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="홍길동" />
             </div>
-            <div className="form-field" style={{ flex: 0.6 }}>
+            <div className="form-field">
               <label className="form-label">나이</label>
               <input className="form-input" type="number" value={form.age} onChange={(e) => set('age', e.target.value)} placeholder="24" />
             </div>
-            <div className="form-field">
+          </div>
+
+          <div className="form-row">
+            <div className="form-field" style={{ flex: 0.5 }}>
               <label className="form-label">경력 구분</label>
               <select className="form-select" value={form.experience} onChange={(e) => set('experience', e.target.value)}>
                 <option value="비전공자">비전공자</option>
@@ -109,6 +114,15 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
                 <option value="국비수료">국비수료</option>
                 <option value="실무경력">실무경력</option>
               </select>
+            </div>
+            <div className="form-field">
+              <label className="form-label">세부 내용 (전공/직무 등)</label>
+              <input 
+                className="form-input" 
+                value={form.experience_detail} 
+                onChange={(e) => set('experience_detail', e.target.value)} 
+                placeholder="예: 컴퓨터공학, 마케터 2년" 
+              />
             </div>
           </div>
 

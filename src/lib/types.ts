@@ -43,6 +43,7 @@ export interface Student {
   gpa: number;
   attendance_rate: number;
   experience?: string;
+  experience_detail?: string;
   note?: string;
   project_scores: ProjectScore[];
   created_at?: string;

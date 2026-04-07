@@ -69,6 +69,7 @@ create table public.students (
   gpa decimal(3,2) default 0,
   attendance_rate smallint default 0,
   experience varchar(50) default '비전공자',
+  experience_detail text,
   note text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
