@@ -9,7 +9,7 @@ import { StarRating } from '@/components/common/StarRating';
 import { useData } from '@/context/DataContext';
 import toast from 'react-hot-toast';
 import ReactMarkdown from 'react-markdown';
-import { getStageColorClass, formatDateTime } from '@/lib/utils';
+import { getStageColorClass } from '@/lib/utils';
 import { format } from 'date-fns';
 
 interface Props {
@@ -102,17 +102,15 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         } else {
           await updateConsultation(editingLog.id, { content: logForm.content, consulted_at: combinedDateTime, type: logForm.type as any, student_id: logForm.student_id });
         }
-        toast.success('기록이 수정되었습니다');
       } else {
         if (Number(logForm.student_id) === -1) {
           await addProjectLog({ team_id: team.id, log_date: logForm.date, type: logForm.type as any, content: logForm.content, title: logForm.type });
-          toast.success('팀 활동 로그가 추가되었습니다');
         } else {
           await addConsultation({ student_id: Number(logForm.student_id), project_id: team.project_id, content: logForm.content, consulted_at: combinedDateTime, type: logForm.type as any });
-          toast.success('개인 로그가 추가되었습니다');
         }
       }
       setShowLogModal(false);
+      toast.success('저장 성공 (v8.26)');
     } catch (err) { console.error(err); }
   };
 
@@ -120,12 +118,21 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     const memberIds = members.map(m => m.student_id);
     const individualLogs = consultations
       .filter(c => memberIds.includes(Number(c.student_id)) && c.project_id === team.project_id)
-      .map(c => ({ ...c, isTeam: false, date: c.consulted_at }));
+      .map(c => ({ ...c, isTeam: false, dateLine: c.consulted_at }));
     const teamLogs = projectLogs
       .filter(pl => pl.team_id === team.id)
-      .map(pl => ({ ...pl, isTeam: true, date: pl.log_date, student_id: -1 }));
-    return [...individualLogs, ...teamLogs].sort((a, b) => b.date.localeCompare(a.date));
+      .map(pl => ({ ...pl, isTeam: true, dateLine: pl.log_date, student_id: -1 }));
+    return [...individualLogs, ...teamLogs].sort((a, b) => b.dateLine.localeCompare(a.dateLine));
   }, [consultations, projectLogs, members, team.id, team.project_id]);
+
+  // Fix 2: HARDWARE Date Format DIRECTLY
+  const renderDate = (d: string) => {
+    if (!d) return '-';
+    // 2026-04-08T00:00:00+00:00 -> 2026-04-08 00:00
+    const clean = d.replace('T', ' ').split('.')[0].replace(/(\+\d{2}:\d{2}|Z)$/, '');
+    const final = clean.length > 16 ? clean.substring(0, 16) : clean;
+    return final.includes(':') ? final : `${final} 00:00`;
+  };
 
   return (
     <div className="detail-panel-overlay" onClick={onClose}>
@@ -135,7 +142,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--text-primary)' }}><X size={24} /></button>
           <div className="detail-avatar">{team.team_name[0]}</div>
           <div>
-            <h2 style={{ fontSize: 20, margin: 0 }}>{team.team_name} <small style={{fontSize: 10, opacity: 0.3}}>v8.25 Final</small></h2>
+            <h2 style={{ fontSize: 20, margin: 0 }}>{team.team_name} <small style={{fontSize: 10, opacity: 0.3}}>v8.26 Nuclear</small></h2>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{project?.name}</div>
           </div>
         </div>
@@ -240,10 +247,10 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                      <div key={`log-i-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}`, background: 'var(--bg-elevated)', padding: 12, borderRadius: 8 }}>
                         <div className="consult-meta">
                            <span className="badge">{c.type}</span>
-                           <span>{formatDateTime(c.date)}</span>
+                           <span>{renderDate(c.dateLine)}</span>
                            <span style={{ fontWeight: 700 }}>{c.isTeam ? `👥 ${team.team_name}` : `👤 ${students.find(s=>s.id===Number(c.student_id))?.name || '개인'}`}</span>
                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
-                              <button onClick={() => { setEditingLog(c); setLogForm({ type: c.type, date: c.date.split('T')[0], time: c.date.includes('T') ? c.date.split('T')[1].slice(0, 5) : '00:00', content: c.content, student_id: c.student_id }); setShowLogModal(true); }} style={{ padding: 2, background: 'none', border: 'none', color: 'var(--text-muted)' }}><Edit3 size={12} /></button>
+                              <button onClick={() => { setEditingLog(c); setLogForm({ type: c.type, date: c.dateLine.split('T')[0], time: c.dateLine.includes('T') ? c.dateLine.split('T')[1].slice(0, 5) : '00:00', content: c.content, student_id: c.student_id }); setShowLogModal(true); }} style={{ padding: 2, background: 'none', border: 'none', color: 'var(--text-muted)' }}><Edit3 size={12} /></button>
                               <button onClick={() => { if(confirm('삭제하시겠습니까?')) { if (c.isTeam) deleteProjectLog(c.id); else deleteConsultation(c.id); } }} style={{ padding: 2, background: 'none', border: 'none', color: 'var(--red)', opacity: 0.6 }}><Trash2 size={12} /></button>
                            </div>
                         </div>
@@ -255,25 +262,6 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
            )}
         </div>
       </div>
-
-      {showMemberSelector && (
-        <div className="modal-overlay" onClick={() => setShowMemberSelector(false)}>
-          <div className="modal card" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header"><h3 className="modal-title">팀원 추가</h3></div>
-            <div className="modal-body">
-              <input className="form-input" placeholder="이름으로 검색..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)} autoFocus />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12, maxHeight: 300, overflowY: 'auto' }}>
-                {students.filter(s => s.name.includes(memberSearch) && !members.some(m => m.student_id === s.id)).map(s => (
-                  <div key={s.id} onClick={() => { addTeamMember(team.id, s.id); setShowMemberSelector(false); }} 
-                    style={{ padding: 12, borderRadius: 8, background: 'var(--bg-elevated)', display: 'flex', justifyContent: 'space-between', cursor: 'pointer' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{s.name}</span><Plus size={14} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showLogModal && (
         <div className="modal-overlay" onClick={() => setShowLogModal(false)}>
@@ -295,33 +283,8 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                     <textarea className="form-input" rows={6} value={logForm.content} onChange={e => setLogForm(f => ({ ...f, content: e.target.value }))} />
                  </div>
                  <div className="form-row" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
-                    <div className="form-field">
-                       <label className="form-label">날짜</label>
-                       <input type="date" className="form-input" value={logForm.date} onChange={e => setLogForm(f => ({ ...f, date: e.target.value }))} />
-                    </div>
-                    <div className="form-field">
-                       <label className="form-label">시간</label>
-                       <input type="time" className="form-input" value={logForm.time} onChange={e => setLogForm(f => ({ ...f, time: e.target.value }))} />
-                    </div>
-                 </div>
-                 <div className="form-field">
-                    <label className="form-label">유형</label>
-                    <select className="form-select" value={logForm.type} onChange={e => setLogForm(f => ({ ...f, type: e.target.value as any }))}>
-                       {Number(logForm.student_id) === -1 ? (
-                         <>
-                           <option value="회의록">회의록</option>
-                           <option value="멘토피드백">멘토피드백</option>
-                           <option value="진행보고">진행보고</option>
-                         </>
-                       ) : (
-                         <>
-                           <option value="개인상담">개인상담</option>
-                           <option value="학습점검">학습점검</option>
-                           <option value="전화상담">전화상담</option>
-                           <option value="기타">기타</option>
-                         </>
-                       )}
-                    </select>
+                    <div className="form-field"><input type="date" className="form-input" value={logForm.date} onChange={e => setLogForm(f => ({ ...f, date: e.target.value }))} /></div>
+                    <div className="form-field"><input type="time" className="form-input" value={logForm.time} onChange={e => setLogForm(f => ({ ...f, time: e.target.value }))} /></div>
                  </div>
               </div>
               <div className="modal-footer" style={{ display: 'flex', gap: 12, marginTop: 16 }}>

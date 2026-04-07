@@ -10,7 +10,6 @@ import { Consultation, ConsultationType, Student } from '@/lib/types';
 import { useData } from '@/context/DataContext';
 import StudentDetailPanel from '@/components/students/StudentDetailPanel';
 import ConsultationModal from '@/components/common/ConsultationModal';
-import { formatDateTime } from '@/lib/utils';
 
 export default function ConsultationPage() {
   const { selectedCohort } = useCohort();
@@ -35,18 +34,34 @@ export default function ConsultationPage() {
       : ''
   );
 
-  // Fix 1: Global Sync - Merge Consultation and ProjectLogs
-  const allLogs = useMemo(() => {
+  // Fix 1: Robust UNION merge in memory (v8.26)
+  const allTimelineLogs = useMemo(() => {
+    // 1. Personal Logs
     const individual = consultations.map(c => ({ 
-      ...c, isTeam: false, date: c.consulted_at, 
-      display_name: students.find(s => s.id === c.student_id)?.name || '알 수 없음'
+      id: `c-${c.id}`,
+      originalId: c.id,
+      isTeam: false,
+      date: c.consulted_at || '',
+      type: c.type || '개인상담',
+      content: c.content || '',
+      follow_up: c.follow_up || '',
+      student_id: c.student_id,
+      display_name: students.find(s => s.id === c.student_id)?.name || '기타'
     }));
     
+    // 2. Team Logs
     const teamLogs = projectLogs.map(pl => {
-      const t = teams.find(team => team.id === pl.team_id);
+      const t = teams.find(team => Number(team.id) === Number(pl.team_id));
       return {
-        ...pl, isTeam: true, date: pl.log_date, type: pl.type || '회의록',
-        display_name: t ? `${t.team_name} (팀)` : '팀 로그'
+        id: `pl-${pl.id}`,
+        originalId: pl.id,
+        isTeam: true,
+        date: pl.log_date || '', // log_date format in DB is YYYY-MM-DD
+        type: pl.type || '회의록',
+        content: pl.content || '',
+        follow_up: '',
+        student_id: -1,
+        display_name: t ? `${t.team_name} (팀)` : '팀 활동'
       };
     });
     
@@ -54,67 +69,67 @@ export default function ConsultationPage() {
   }, [consultations, projectLogs, students, teams]);
 
   const filteredLogs = useMemo(() => {
-    return allLogs
+    return allTimelineLogs
       .filter((l: any) => {
-        // For individual logs, check cohort. For team logs, we allow them or group by project's cohort (simplified for now).
+        // Filter by Cohort
         let matchesCohort = true;
         if (!l.isTeam) {
           const student = students.find((s) => s.id === l.student_id);
           matchesCohort = selectedCohort === '전체' || student?.cohort?.name === selectedCohort;
         }
         
-        const matchesSearch = l.display_name.toLowerCase().includes(searchTerm.toLowerCase()) || l.content.toLowerCase().includes(searchTerm.toLowerCase());
+        // Filter by Search
+        const matchesSearch = 
+          l.display_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+          l.content.toLowerCase().includes(searchTerm.toLowerCase());
+          
+        // Filter by Type
         const matchesType = filterType === '전체' || l.type === filterType;
         
+        // Filter by Date
         let matchesDate = true;
-        const cDate = l.date; // already mapped correctly
         if (startDate && endDate) {
-          matchesDate = cDate >= startDate && cDate <= endDate;
+          matchesDate = l.date >= startDate && l.date <= endDate;
         } else if (startDate) {
-          matchesDate = cDate >= startDate;
+          matchesDate = l.date >= startDate;
         } else if (endDate) {
-          matchesDate = cDate <= endDate;
+          matchesDate = l.date <= endDate;
         }
 
         return matchesCohort && matchesSearch && matchesType && matchesDate;
       })
       .sort((a, b) => b.date.localeCompare(a.date));
-  }, [selectedCohort, searchTerm, filterType, startDate, endDate, allLogs, students]);
+  }, [selectedCohort, searchTerm, filterType, startDate, endDate, allTimelineLogs, students]);
 
   const handleSaveConsultation = (data: Partial<Consultation>) => {
     if (editingCons) {
       updateConsultation(editingCons.id, data);
-      toast.success('기록이 수정되었습니다');
+      toast.success('수정 완료');
     } else {
       addConsultation(data as any);
-      toast.success('기록이 추가되었습니다');
+      toast.success('저장 완료');
     }
     setShowAddModal(false);
     setEditingCons(null);
   };
 
-  const clearFilters = () => {
-    setSearchTerm('');
-    setFilterType('전체');
-    setStartDate('');
-    setEndDate('');
+  // Direct Format Fix
+  const renderDate = (d: string) => {
+    if (!d) return '-';
+    // 2026-04-08T00:00:00+00:00 -> 2026-04-08 00:00
+    const clean = d.replace('T', ' ').split('.')[0].replace(/(\+\d{2}:\d{2}|Z)$/, '');
+    const final = clean.length > 16 ? clean.substring(0, 16) : clean;
+    return final.includes(':') ? final : `${final} 00:00`;
   };
-
-  const currentCohortStudents = students.filter(s => selectedCohort === '전체' || s.cohort?.name === selectedCohort);
 
   return (
     <div className="page-wrapper">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
-          <h1 className="page-title">상담 및 활동 이력 관리</h1>
-          <p className="page-subtitle">수강생 및 팀별 활동 내역 통합 관리 (v8.25)</p>
+          <h1 className="page-title">상담 및 활동 통합 이력 <small style={{fontSize: 12, opacity: 0.4}}>v8.26</small></h1>
+          <p className="page-subtitle">개인 및 팀 활동 로그 통합 뷰어 (v8.26)</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          {(startDate || endDate || searchTerm || filterType !== '전체') && (
-            <button className="btn btn-secondary" onClick={clearFilters} style={{ height: 42, fontSize: 13 }}>
-              <X size={16} /> 필터 초기화
-            </button>
-          )}
           <button className="btn btn-primary" onClick={() => setShowAddModal(true)} style={{ height: 42, gap: 8 }}>
             <PlusCircle size={18} /> 상담 기록 추가
           </button>
@@ -125,92 +140,50 @@ export default function ConsultationPage() {
         <div style={{ display: 'grid', gridTemplateColumns: '1.5fr 1fr 1fr', gap: 16 }}>
           <div style={{ position: 'relative' }}>
             <Search size={18} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: 'var(--text-muted)' }} />
-            <input 
-              className="form-input" 
-              placeholder="이름 또는 내용 검색..." 
-              style={{ paddingLeft: 40, height: 42 }}
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
+            <input className="form-input" placeholder="이름 또는 내용 검색..." style={{ paddingLeft: 40, height: 42 }} value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
           </div>
-          
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Calendar size={16} style={{ color: 'var(--text-muted)' }} />
-            <div style={{ display: 'flex', alignItems: 'center', gap: 4, flex: 1 }}>
-              <input type="date" className="form-input" style={{ height: 42, fontSize: 12, padding: '0 8px' }} value={startDate} onChange={e => setStartDate(e.target.value)} />
-              <span style={{ color: 'var(--text-muted)' }}>—</span>
-              <input type="date" className="form-input" style={{ height: 42, fontSize: 12, padding: '0 8px' }} value={endDate} onChange={e => setEndDate(e.target.value)} />
+            <Calendar size={16} />
+            <div style={{ display: 'flex', gap: 4 }}>
+              <input type="date" className="form-input" value={startDate} onChange={e => setStartDate(e.target.value)} />
+              <input type="date" className="form-input" value={endDate} onChange={e => setEndDate(e.target.value)} />
             </div>
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Filter size={16} style={{ color: 'var(--text-muted)' }} />
-            <select className="form-select" style={{ height: 42 }} value={filterType} onChange={(e) => setFilterType(e.target.value)}>
-              <option value="전체">전체 유형</option>
-              <optgroup label="개인 상담">
-                <option value="개인상담">개인상담</option>
-                <option value="진로상담">진로상담</option>
-                <option value="학습점검">학습점검</option>
-              </optgroup>
-              <optgroup label="팀 활동">
-                <option value="회의록">회의록</option>
-                <option value="멘토피드백">멘토피드백</option>
-                <option value="진행보고">진행보고</option>
-              </optgroup>
-            </select>
-          </div>
+          <select className="form-select" value={filterType} onChange={e => setFilterType(e.target.value)}>
+            <option value="전체">전체 유형</option>
+            <option value="회의록">회의록(팀)</option>
+            <option value="멘토피드백">멘토피드백(팀)</option>
+            <option value="개인상담">개인상담</option>
+            <option value="진로상담">진로상담</option>
+          </select>
         </div>
       </div>
 
-      <div className="card" style={{ overflow: 'hidden' }}>
+      <div className="card">
         <table className="data-table">
           <thead>
             <tr>
-              <th style={{ width: 160 }}>일시</th>
-              <th style={{ width: 140 }}>이름/팀명</th>
-              <th style={{ width: 120 }}>구분</th>
-              <th>주요 내용</th>
-              <th style={{ width: 100 }}>로그 타입</th>
+              <th style={{ width: 140 }}>일시</th>
+              <th style={{ width: 140 }}>이름 / 팀명</th>
+              <th style={{ width: 100 }}>구분</th>
+              <th>로그 내용</th>
             </tr>
           </thead>
           <tbody>
             {filteredLogs.map((l: any) => (
-              <tr key={`${l.isTeam ? 't' : 's'}-${l.id}`} onClick={() => !l.isTeam && setSelectedStudent(students.find(s => s.id === l.student_id) || null)} style={{ cursor: l.isTeam ? 'default' : 'pointer' }}>
-                <td style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                  {formatDateTime(l.date)}
-                </td>
-                <td style={{ fontWeight: 700 }}>
-                  <span style={{ color: l.isTeam ? 'var(--accent)' : 'var(--text-primary)' }}>{l.display_name}</span>
-                </td>
-                <td>
-                  <span className={`badge ${l.isTeam ? 'badge-p1' : 'badge-p3'}`}>{l.type}</span>
-                </td>
-                <td style={{ fontSize: 14, lineHeight: 1.5 }}>
-                  <div style={{ maxHeight: 60, overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical' }}>
-                    {l.content}
-                  </div>
-                </td>
-                <td>
-                  <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>{l.isTeam ? '👥 팀활동' : '👤 개별상담'}</span>
-                </td>
+              <tr key={l.id}>
+                <td style={{ fontSize: 13, color: 'var(--text-muted)' }}>{renderDate(l.date)}</td>
+                <td style={{ fontWeight: 700, color: l.isTeam ? 'var(--accent)' : 'inherit' }}>{l.display_name}</td>
+                <td><span className={`badge ${l.isTeam ? 'badge-p1' : 'badge-p4'}`}>{l.type}</span></td>
+                <td style={{ fontSize: 13, lineHeight: 1.4 }}>{l.content}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        
-        {filteredLogs.length === 0 && (
-          <div className="empty-state" style={{ padding: '60px 0' }}>
-            <div className="empty-icon">💬</div>
-            <div style={{ fontSize: 16, fontWeight: 600, color: 'var(--text-muted)' }}>검색 결과가 없습니다</div>
-          </div>
-        )}
+        {filteredLogs.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>통합 로그가 없습니다.</div>}
       </div>
 
-      <ConsultationModal isOpen={showAddModal} onClose={() => { setShowAddModal(false); setEditingCons(null); }} onSave={handleSaveConsultation} editingCons={editingCons} allStudents={currentCohortStudents} />
-
-      {selectedStudent && (
-        <StudentDetailPanel student={selectedStudent} tags={tags.filter(t => t.student_id === selectedStudent.id)} consultations={consultations.filter(c => c.student_id === selectedStudent.id)} onClose={() => setSelectedStudent(null)} initialTab="consultations" />
-      )}
+      <ConsultationModal isOpen={showAddModal} onClose={() => { setShowAddModal(false); setEditingCons(null); }} onSave={handleSaveConsultation} editingCons={editingCons} allStudents={students} />
     </div>
   );
 }

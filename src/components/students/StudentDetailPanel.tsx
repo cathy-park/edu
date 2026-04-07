@@ -10,7 +10,6 @@ import toast from 'react-hot-toast';
 import { useData } from '@/context/DataContext';
 import ReactMarkdown from 'react-markdown';
 import ConsultationModal from '../common/ConsultationModal';
-import { formatDateTime } from '@/lib/utils';
 
 interface Props {
   student: Student;
@@ -38,19 +37,27 @@ export default function StudentDetailPanel({
   const studentTimeline = useMemo(() => {
     const individual = allConsultations
       .filter(c => Number(c.student_id) === Number(currentStudentId))
-      .map(c => ({ ...c, isTeam: false, date: c.consulted_at }));
+      .map(c => ({ ...c, isTeam: false, dateLine: c.consulted_at }));
     const myTeamIds = teamMembers.filter(tm => Number(tm.student_id) === Number(currentStudentId)).map(tm => tm.team_id);
     
-    // Fix 3: Robust Team Name Mapping
     const teamInLogs = projectLogs.filter(pl => myTeamIds.includes(pl.team_id)).map(pl => {
       const t = teams.find(team => Number(team.id) === Number(pl.team_id));
       return { 
-        ...pl, isTeam: true, date: pl.log_date, student_id: currentStudentId, consulted_at: pl.log_date,
+        ...pl, isTeam: true, dateLine: pl.log_date, student_id: currentStudentId, consulted_at: pl.log_date,
         type: pl.type || '회의록', team_name: t?.team_name || '소속 팀'
       };
     });
-    return [...individual, ...teamInLogs].sort((a, b) => b.date.localeCompare(a.date));
+    return [...individual, ...teamInLogs].sort((a, b) => b.dateLine.localeCompare(a.dateLine));
   }, [allConsultations, projectLogs, teamMembers, currentStudentId, teams]);
+
+  // Fix 2: HARDWARE Date Format DIRECTLY
+  const renderDate = (d: string) => {
+    if (!d) return '-';
+    // 2026-04-08T00:00:00+00:00 -> 2026-04-08 00:00
+    const clean = d.replace('T', ' ').split('.')[0].replace(/(\+\d{2}:\d{2}|Z)$/, '');
+    const final = clean.length > 16 ? clean.substring(0, 16) : clean;
+    return final.includes(':') ? final : `${final} 00:00`;
+  };
 
   const calculateGPA = () => {
     if (student.project_scores.length === 0) return '0.0';
@@ -63,6 +70,7 @@ export default function StudentDetailPanel({
       if (editingCons) await updateConsultation(editingCons.id, data);
       else await addConsultation({ ...data, student_id: student.id } as any);
       setShowConsModal(false);
+      toast.success('저장 성공 (v8.26)');
     } catch (error) {}
   };
 
@@ -74,7 +82,7 @@ export default function StudentDetailPanel({
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--text-primary)' }}><X size={24} /></button>
           <div className="detail-avatar">{student.name[0]}</div>
           <div>
-            <h2 style={{ fontSize: 20, margin: 0 }}>{student.name} <small style={{fontSize: 10, opacity: 0.3}}>v8.25 Final</small></h2>
+            <h2 style={{ fontSize: 20, margin: 0 }}>{student.name} <small style={{fontSize: 10, opacity: 0.3}}>v8.26 Nuclear</small></h2>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{student.cohort?.name} · {student.email}</div>
           </div>
         </div>
@@ -149,7 +157,7 @@ export default function StudentDetailPanel({
                      <div key={`hist-f-item-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}`, background: 'var(--bg-elevated)', padding: 12, borderRadius: 8 }}>
                         <div className="consult-meta">
                            <span className="badge">{c.type}</span>
-                           <span>{formatDateTime(c.date)}</span>
+                           <span>{renderDate(c.dateLine)}</span>
                            <span style={{ fontWeight: 700 }}>{c.isTeam ? `👥 ${c.team_name}` : '👤 개인 피드백'}</span>
                            {!c.isTeam && (
                              <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
