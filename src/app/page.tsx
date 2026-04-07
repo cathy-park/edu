@@ -10,13 +10,14 @@ import TodoList from '@/components/dashboard/TodoList';
 import WorkTaskSection from '@/components/dashboard/WorkTaskSection';
 import { useCohort } from '@/context/CohortContext';
 import { useData } from '@/context/DataContext';
+import { Schedule } from '@/lib/types';
 import toast from 'react-hot-toast';
 
 export default function DashboardPage() {
   const router = useRouter();
   const { selectedCohort, setSelectedCohort, cohorts, addCohort, updateCohort, deleteCohort } = useCohort();
   const { 
-    students, consultations, schedules, todos, 
+    students, consultations, schedules, todos, projects,
     addSchedule, updateSchedule, deleteSchedule,
     addTodo, toggleTodo, deleteTodo 
   } = useData();
@@ -60,7 +61,7 @@ export default function DashboardPage() {
   const totalStudents = cohortFilteredStudents.length;
   const activeStudents = cohortFilteredStudents.filter((s) => s.status === '수강중').length;
   
-  // Real calculation for consultations this week (consistent with consultation page)
+  // Real calculation for consultations this week
   const consultationsThisWeek = useMemo(() => {
     const today = new Date();
     const startOfCurrentWeek = startOfWeek(today, { weekStartsOn: 1 });
@@ -92,11 +93,25 @@ export default function DashboardPage() {
     setIsConfirmingDelete(false);
   };
 
+  const calendarSchedules = useMemo(() => {
+    const projectSchedules = projects.map(p => ({
+      id: 10000 + p.id,
+      title: `[프로젝트] ${p.name}`,
+      start_date: p.start_date || '',
+      end_date: p.end_date || '',
+      category: '팀활동' as any,
+      is_dday: false,
+      color: p.color || `hsl(${(p.id * 137) % 360}, 70%, 50%)`,
+      created_at: ''
+    }));
+    
+    return [...schedules, ...projectSchedules] as Schedule[];
+  }, [schedules, projects]);
+
   return (
     <div className="page-wrapper">
-      {/* Top Header - Greeting Left, Selector Right */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32, gap: 20 }}>
-        <div style={{ flex: 1, paddingTop: 15 }}> {/* greeting-title 상단 15px margin */}
+        <div style={{ flex: 1, paddingTop: 15 }}>
           <div className="greeting-title" style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 26, fontWeight: 800, marginTop: 30 }}>
             {greeting}, 
             {isEditingName ? (
@@ -132,7 +147,6 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* Home page button vertical alignment and sizing */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 12, alignSelf: 'flex-end', marginBottom: 6, transform: 'translateY(-20px)' }}>
           <div style={{ position: 'relative' }}>
             <select 
@@ -157,18 +171,10 @@ export default function DashboardPage() {
                 onKeyDown={(e) => e.key === 'Enter' && handleAddCohort()}
                 autoFocus
               />
-              <button 
-                className="btn btn-primary" 
-                style={{ width: 38, height: 38, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: 'var(--radius-sm)' }} 
-                onClick={handleAddCohort}
-              >
+              <button className="btn btn-primary" style={{ width: 38, height: 38, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)' }} onClick={handleAddCohort}>
                 <Check size={18} />
               </button>
-              <button 
-                className="btn btn-secondary" 
-                style={{ width: 38, height: 38, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, borderRadius: 'var(--radius-sm)' }} 
-                onClick={() => setShowAddCohort(false)}
-              >
+              <button className="btn btn-secondary" style={{ width: 38, height: 38, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)' }} onClick={() => setShowAddCohort(false)}>
                 <X size={18} />
               </button>
             </div>
@@ -177,62 +183,28 @@ export default function DashboardPage() {
               {isConfirmingDelete ? (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(239,68,68,0.1)', padding: '4px 12px', borderRadius: 'var(--radius-md)', border: '1px solid rgba(239,68,68,0.2)' }}>
                   <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--red)' }}>정말 삭제할까요?</span>
-                  <button 
-                    className="action-btn" 
-                    style={{ background: 'var(--red)', color: 'white', width: 26, height: 26, borderRadius: 6 }} 
-                    onClick={async (e) => { 
-                      e.stopPropagation(); 
-                      if (await deleteCohort(selectedCohort, true)) {
-                        setIsConfirmingDelete(false);
-                        setShowEditCohort(false);
-                      }
-                    }}
-                    title="확인"
-                  >
+                  <button className="action-btn" style={{ background: 'var(--red)', color: 'white', width: 26, height: 26, borderRadius: 6 }} onClick={async (e) => { e.stopPropagation(); if (await deleteCohort(selectedCohort, true)) { setIsConfirmingDelete(false); setShowEditCohort(false); } }}>
                     <Check size={14} />
                   </button>
-                  <button 
-                    className="action-btn" 
-                    style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', width: 26, height: 26, borderRadius: 6 }} 
-                    onClick={(e) => { e.stopPropagation(); setIsConfirmingDelete(false); }}
-                    title="취소"
-                  >
+                  <button className="action-btn" style={{ background: 'var(--bg-elevated)', border: '1px solid var(--border)', width: 26, height: 26, borderRadius: 6 }} onClick={(e) => { e.stopPropagation(); setIsConfirmingDelete(false); }}>
                     <X size={14} color="var(--text-muted)" />
                   </button>
                 </div>
               ) : (
                 <>
-                  <input 
-                    className="form-input"
-                    style={{ width: 130, height: 38, fontSize: 14 }}
-                    placeholder="새 기수 명칭..."
-                    value={editCohortName}
-                    onChange={(e) => setEditCohortName(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleEditCohort()}
-                    autoFocus
-                  />
-                  <button className="btn btn-secondary" style={{ width: 38, height: 38, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)' }} onClick={handleEditCohort}><Check size={18} /></button>
-                  <button 
-                    className="btn btn-secondary" 
-                    style={{ width: 38, height: 38, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', color: 'var(--red)' }} 
-                    onClick={(e) => { 
-                      e.preventDefault(); 
-                      e.stopPropagation(); 
-                      setIsConfirmingDelete(true);
-                    }}
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                  <button className="btn btn-secondary" style={{ width: 38, height: 38, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)' }} onClick={() => { setShowEditCohort(false); setIsConfirmingDelete(false); }}><X size={18} /></button>
+                  <input className="form-input" style={{ width: 130, height: 38, fontSize: 14 }} value={editCohortName} onChange={(e) => setEditCohortName(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleEditCohort()} autoFocus />
+                  <button className="btn btn-secondary" style={{ width: 38, height: 38 }} onClick={handleEditCohort}><Check size={18} /></button>
+                  <button className="btn btn-secondary" style={{ width: 38, height: 38, color: 'var(--red)' }} onClick={() => setIsConfirmingDelete(true)}><Trash2 size={18} /></button>
+                  <button className="btn btn-secondary" style={{ width: 38, height: 38 }} onClick={() => setShowEditCohort(false)}><X size={18} /></button>
                 </>
               )}
             </div>
           ) : (
             <>
-              <button className="btn btn-secondary" style={{ height: 38, padding: '0 16px', borderRadius: 'var(--radius-md)', fontSize: 13, gap: 6 }} onClick={() => { setEditCohortName(selectedCohort); setShowEditCohort(true); }} disabled={selectedCohort === '전체'}>
+              <button className="btn btn-secondary" style={{ height: 38, padding: '0 16px', fontSize: 13, gap: 6 }} onClick={() => { setEditCohortName(selectedCohort); setShowEditCohort(true); }} disabled={selectedCohort === '전체'}>
                 <Pencil size={15} /> 기수 편집
               </button>
-              <button className="btn btn-primary" style={{ height: 38, padding: '0 16px', borderRadius: 'var(--radius-md)', fontSize: 13, gap: 6 }} onClick={() => setShowAddCohort(true)}>
+              <button className="btn btn-primary" style={{ height: 38, padding: '0 16px', fontSize: 13, gap: 6 }} onClick={() => setShowAddCohort(true)}>
                 <Plus size={15} /> 기수 추가
               </button>
             </>
@@ -240,53 +212,33 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Stat Cards */}
       <div className="stat-cards-grid">
-        <div 
-          className="stat-card" 
-          onClick={() => router.push('/students')}
-          style={{ cursor: 'pointer' }}
-        >
+        <div className="stat-card" onClick={() => router.push('/students')} style={{ cursor: 'pointer' }}>
           <div className="stat-card-content">
             <div className="stat-card-label">{selectedCohort === '전체' ? '전체 수강생' : `${selectedCohort} 수강생`}</div>
             <div className="stat-card-value">{totalStudents}명</div>
           </div>
-          <div className="stat-card-icon" style={{ background: 'rgba(124,58,237,0.15)' }}>
-            <Users size={20} color="#a78bfa" />
-          </div>
+          <div className="stat-card-icon" style={{ background: 'rgba(124,58,237,0.15)' }}><Users size={20} color="#a78bfa" /></div>
         </div>
-        <div 
-          className="stat-card" 
-          onClick={() => router.push('/students?status=수강중')}
-          style={{ cursor: 'pointer' }}
-        >
+        <div className="stat-card" onClick={() => router.push('/students?status=수강중')} style={{ cursor: 'pointer' }}>
           <div className="stat-card-content">
             <div className="stat-card-label">{selectedCohort === '전체' ? '전체 수강중' : `${selectedCohort} 수강중`}</div>
             <div className="stat-card-value">{activeStudents}명</div>
           </div>
-          <div className="stat-card-icon" style={{ background: 'rgba(10,185,129,0.15)' }}>
-            <GraduationCap size={20} color="#34d399" />
-          </div>
+          <div className="stat-card-icon" style={{ background: 'rgba(10,185,129,0.15)' }}><GraduationCap size={20} color="#34d399" /></div>
         </div>
-        <div 
-          className="stat-card" 
-          onClick={() => router.push('/consultations?period=this_week')}
-          style={{ cursor: 'pointer' }}
-        >
+        <div className="stat-card" onClick={() => router.push('/consultations?period=this_week')} style={{ cursor: 'pointer' }}>
           <div className="stat-card-content">
             <div className="stat-card-label">이번주 상담 ({selectedCohort})</div>
             <div className="stat-card-value">{consultationsThisWeek}건</div>
           </div>
-          <div className="stat-card-icon" style={{ background: 'rgba(239,68,68,0.15)' }}>
-            <MessageSquare size={20} color="#f87171" />
-          </div>
+          <div className="stat-card-icon" style={{ background: 'rgba(239,68,68,0.15)' }}><MessageSquare size={20} color="#f87171" /></div>
         </div>
       </div>
 
-      {/* Calendar + Todo Grid */}
       <div className="dashboard-grid">
         <DashboardCalendar 
-          schedules={schedules}
+          schedules={calendarSchedules}
           todos={todos}
           onAdd={addSchedule}
           onUpdate={updateSchedule}
@@ -295,13 +247,10 @@ export default function DashboardPage() {
           onSelectDate={setSelectedDate}
         />
         <div style={{ flex: 1 }}>
-          <TodoList 
-            selectedDate={selectedDate}
-          />
+          <TodoList selectedDate={selectedDate} />
         </div>
       </div>
 
-      {/* NEW: Work Task / GPTs Section */}
       <WorkTaskSection />
     </div>
   );

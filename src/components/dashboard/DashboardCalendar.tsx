@@ -166,7 +166,11 @@ export default function DashboardCalendar({
                         e.stopPropagation(); 
                         setModal({ mode: 'edit', schedule: ev as Schedule }); 
                       }}
-                      style={{ cursor: isTodo ? 'default' : 'pointer', height: isStart ? 'auto' : 6 }}>
+                      style={{ 
+                        cursor: isTodo ? 'default' : 'pointer', 
+                        height: isStart ? 'auto' : 6,
+                        background: ev.color || undefined
+                      }}>
                       {isStart && ev.title}
                     </div>
                   ) : (
@@ -176,7 +180,14 @@ export default function DashboardCalendar({
                         e.stopPropagation(); 
                         setModal({ mode: 'edit', schedule: ev as Schedule }); 
                       }}
-                      style={{ cursor: isTodo ? 'default' : 'pointer', height: isStart ? 'auto' : 6, margin: isStart ? '3px 0' : '1px 0' }}>
+                      style={{ 
+                        cursor: isTodo ? 'default' : 'pointer', 
+                        height: isStart ? 'auto' : 6, 
+                        margin: isStart ? '3px 0' : '1px 0',
+                        backgroundColor: ev.color ? `${ev.color}33` : undefined,
+                        borderLeftColor: ev.color || undefined,
+                        color: ev.color || undefined
+                      }}>
                       {isStart ? ev.title : ''}
                     </div>
                   );

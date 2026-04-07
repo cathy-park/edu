@@ -77,6 +77,7 @@ export interface Project {
   end_date?: string;
   stages: string[];
   score_categories: { id: string; label: string }[];
+  color?: string;
   created_at?: string;
 }
 

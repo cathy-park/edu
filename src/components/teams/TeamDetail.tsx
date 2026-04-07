@@ -26,15 +26,14 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     students, projects, updateProjectScore, 
     teamMembers, addTeamMember, removeTeamMember,
     updateTeam, consultations, addConsultation, updateConsultation, deleteConsultation,
-    deleteProjectCategory, updateTeamMemberRole,
-    projectLogs, addProjectLog, updateProjectLog, deleteProjectLog
+    updateTeamMemberRole,
+    projectLogs, addProjectLog, updateProjectLog, deleteProjectLog, updateTeamProjectScore
   } = useData();
   
   const project = projects.find(p => p.id === team.project_id);
   const members = teamMembers.filter(m => m.team_id === team.id);
   
   const [activeTab, setActiveTab] = useState<'info' | 'eval' | 'logs'>('info');
-  const [progress, setProgress] = useState(team.progress_pct);
   const [projectLink, setProjectLink] = useState(team.project_link || '');
   const [teamMemo, setTeamMemo] = useState(team.memo || '');
   const [showMemberSelector, setShowMemberSelector] = useState(false);
@@ -52,19 +51,13 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
   const [activeStudent, setActiveStudent] = useState<Student | null>(null);
 
-  // Initialize active student to first member if not set
-  useEffect(() => {
-    if (members.length > 0 && !activeStudent) {
-      const firstStudent = students.find(s => s.id === members[0].student_id);
-      if (firstStudent) setActiveStudent(firstStudent);
-    }
-  }, [members.length, students, activeStudent]);
-
-  // Sync scores when active student changes
   useEffect(() => {
     if (activeStudent) {
       const score = activeStudent.project_scores.find(ps => ps.project_id === team.project_id);
       setCategoryScores(score?.category_scores || {});
+    } else {
+      // In a real app we might fetch team-wide score here
+      setCategoryScores({}); 
     }
   }, [activeStudent?.id, team.project_id]);
 
@@ -82,10 +75,13 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     toast.success('팀 정보가 저장되었습니다');
   };
 
-  const handleSaveScores = () => {
-    if (!activeStudent) return toast.error('평가할 팀원을 선택하세요');
-    updateProjectScore(activeStudent.id, team.project_id, categoryScores, overallScore);
-    toast.success(`${activeStudent.name}님의 성적이 반영되었습니다`);
+  const handleSaveScores = async () => {
+    if (activeStudent) {
+      await updateProjectScore(activeStudent.id, team.project_id, categoryScores, overallScore);
+      toast.success(`${activeStudent.name}님의 성적이 저장되었습니다`);
+    } else {
+      await updateTeamProjectScore(team.id, team.project_id, categoryScores, overallScore);
+    }
   };
 
   const handleLogSubmit = async () => {
@@ -95,13 +91,11 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
     try {
       if (editingLog) {
-        // Check if it's a project log or consultation
-        if ('team_id' in editingLog && !('student_id' in editingLog)) {
+        if (editingLog.isTeam) {
           await updateProjectLog(editingLog.id, {
             content: logForm.content,
             log_date: logForm.date,
-            type: logForm.type,
-            title: logForm.type // Use type as title for consistency
+            type: logForm.type as any,
           });
         } else {
           await updateConsultation(editingLog.id, {
@@ -114,17 +108,15 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         toast.success('로그가 수정되었습니다');
       } else {
         if (logForm.student_id === -1) {
-          // Add to project_logs (Team-wide)
           await addProjectLog({
             team_id: team.id,
             log_date: logForm.date,
-            type: logForm.type,
+            type: logForm.type as any,
             content: logForm.content,
             title: logForm.type
           });
-          toast.success('팀 전체 활동 로그가 추가되었습니다');
+          toast.success('팀 활동 로그가 추가되었습니다');
         } else {
-          // Add to consultations (Individual)
           await addConsultation({
             student_id: logForm.student_id,
             project_id: team.project_id,
@@ -132,7 +124,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
             consulted_at: combinedDateTime,
             type: logForm.type as any
           });
-          toast.success('개인 활동 로그가 추가되었습니다');
+          toast.success('개인 로그가 추가되었습니다');
         }
       }
     } catch (err) {
@@ -144,30 +136,22 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
   const teamTimeline = useMemo(() => {
     const memberIds = members.map(m => m.student_id);
-    
-    // 1. Get individual consultations
     const individualLogs = consultations
       .filter(c => memberIds.includes(c.student_id) && c.project_id === team.project_id)
       .map(c => ({ ...c, isTeam: false, date: c.consulted_at }));
-
-    // 2. Get team project logs
     const teamLogs = projectLogs
       .filter(pl => pl.team_id === team.id)
       .map(pl => ({ ...pl, isTeam: true, date: pl.log_date, student_id: -1 }));
-
-    // Merge and sort
     return [...individualLogs, ...teamLogs].sort((a, b) => b.date.localeCompare(a.date));
   }, [consultations, projectLogs, members, team.id, team.project_id]);
 
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
-    // Format: MM-DD HH:mm or just HH:mm if today
     try {
       const d = new Date(dateStr);
       const now = new Date();
       const HHmm = dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : '00:00';
       const MMDD = `${d.getMonth() + 1}-${d.getDate()}`;
-      
       if (d.toDateString() === now.toDateString()) return HHmm;
       return `${MMDD} ${HHmm}`;
     } catch {
@@ -210,7 +194,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                   </div>
                   <div className="prog-foot">
                     <span className={`badge ${project ? getStageColorClass(team.stage, project.stages) : ''}`}>{team.stage}</span>
-                    <span className="update-time">마감일: {project?.id === 1 ? '완료' : 'D-12'}</span>
+                    <span className="update-time">마감일: {project?.end_date || '미정'}</span>
                   </div>
                 </div>
               </section>
@@ -250,7 +234,6 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                   <h4 className="s-title"><Users size={16} /> 팀 구성원 ({members.length})</h4>
                   <button className="btn btn-ghost btn-sm" onClick={() => setShowMemberSelector(true)}><UserPlus size={14} /> 추가</button>
                 </div>
-
                 <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
                   <tbody>
                     {members.map(member => {
@@ -262,7 +245,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                             <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                               <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
                                 {student.name}
-                                {member.student_id === team.leader_id && <span style={{ marginLeft: 6, color: 'var(--yellow)', cursor: 'default' }} title="팀장">👑</span>}
+                                {member.student_id === team.leader_id && <span style={{ marginLeft: 6, color: 'var(--yellow)' }}>👑</span>}
                               </span>
                             </div>
                           </td>
@@ -277,16 +260,8 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                           </td>
                           <td style={{ padding: '16px 20px', textAlign: 'right' }}>
                             <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                              <button 
-                                className="btn btn-secondary" 
-                                onClick={() => updateTeam(team.id, { leader_id: member.student_id })}
-                                style={{ padding: '0 8px', height: 28, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, visibility: member.student_id === team.leader_id ? 'hidden' : 'visible' }}
-                              >
-                                👑 팀장
-                              </button>
-                              <button onClick={() => removeTeamMember(member.id)} className="btn btn-ghost" style={{ width: 28, height: 28, padding: 0 }} title="팀원 제외">
-                                <Trash2 size={12} />
-                              </button>
+                              <button className="btn btn-secondary" onClick={() => updateTeam(team.id, { leader_id: member.student_id })} style={{ padding: '0 8px', height: 28, fontSize: 10, visibility: member.student_id === team.leader_id ? 'hidden' : 'visible' }}>👑 팀장</button>
+                              <button onClick={() => removeTeamMember(member.id)} className="btn btn-ghost" style={{ width: 28, height: 28, padding: 0 }}><Trash2 size={12} /></button>
                             </div>
                           </td>
                         </tr>
@@ -300,53 +275,40 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
           {activeTab === 'eval' && (
             <div className="tab-stack">
-              <div className="f-field">
-                <label>평가 대상 팀원</label>
-                <select 
-                  className="form-select" 
-                  value={activeStudent?.id || 0} 
-                  onChange={e => {
-                    const sid = Number(e.target.value);
-                    const std = students.find(s => s.id === sid);
-                    if (std) setActiveStudent(std);
-                  }}
-                >
-                  {members.map(m => {
+              <div className="eval-student-picker" style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 8 }}>
+                 <button className={`btn btn-sm ${!activeStudent ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveStudent(null)}>팀 전체</button>
+                 {members.map(m => {
                     const s = students.find(std => std.id === m.student_id);
-                    return s ? <option key={m.id} value={s.id}>{s.name}</option> : null;
-                  })}
-                </select>
+                    return s ? (
+                      <button key={s.id} className={`btn btn-sm ${activeStudent?.id === s.id ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveStudent(s)}>{s.name}</button>
+                    ) : null;
+                 })}
               </div>
-
-              <div className="score-summary-card" style={{ background: 'var(--accent)', color: 'white' }}>
-                 <div className="total-title" style={{ opacity: 0.9, fontSize: '12px', fontWeight: 800 }}>개인 종합 점수</div>
+              <div className="score-summary-card" style={{ background: activeStudent ? 'var(--purple)' : 'var(--accent)', color: 'white' }}>
+                 <div className="total-title" style={{ opacity: 0.9, fontSize: '12px', fontWeight: 800 }}>{activeStudent ? `${activeStudent.name}님 성취도` : '팀 종합 성취도'}</div>
                  <div className="total-hero" style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8 }}>
                     <StarRating value={overallScore} readonly size={36} />
                     <span className="total-num" style={{ fontSize: '42px', fontWeight: 900 }}>{overallScore.toFixed(1)}</span>
                  </div>
               </div>
-
               <div className="cats-management">
                  <h4 className="s-title">평가 세부 항목</h4>
                  <div className="cats-list-entry" style={{ marginTop: 12 }}>
-                    {(project?.stages || []).map((stage, idx) => {
-                      const catId = stage.trim().replace(/\s+/g, '_');
-                      return (
-                        <div key={catId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{stage}</span>
+                    {(project?.score_categories || []).map((cat) => (
+                        <div key={cat.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{cat.label}</span>
                           <StarRating 
-                            key={`${activeStudent?.id || 0}-${catId}-${categoryScores[catId] || 0}`}
-                            value={categoryScores[catId] || 0} 
-                            onChange={v => setCategoryScores(prev => ({ ...prev, [catId]: v }))} 
-                            size={20} 
+                             key={`${activeStudent?.id || 'team'}-${cat.id}-${categoryScores[cat.id] || 0}`}
+                             value={categoryScores[cat.id] || 0} 
+                             onChange={v => setCategoryScores(prev => ({ ...prev, [cat.id]: v }))} 
+                             size={20} 
                           />
                         </div>
-                      );
-                    })}
+                    ))}
+                    {(!project?.score_categories || project.score_categories.length === 0) && <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: 12 }}>평가 항목이 정의되지 않았습니다.</div>}
                  </div>
-
                  <button className="btn btn-primary btn-full" onClick={handleSaveScores} style={{ marginTop: 24, height: 48, width: '100%' }}>
-                    <Save size={16} /> 평가 점수 최종 저장
+                    <Save size={16} /> {activeStudent ? `${activeStudent.name} 점수 저장` : '팀 점수 전체 저장'}
                  </button>
               </div>
             </div>
@@ -356,21 +318,10 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
             <div className="tab-stack">
               <div className="s-between">
                 <h4 className="s-title">활동 기록 / 피드백</h4>
-                <button className="btn btn-primary btn-sm" onClick={() => { 
-                  setEditingLog(null); 
-                  setLogForm({ 
-                    type: '학습점검', 
-                    date: new Date().toISOString().split('T')[0], 
-                    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
-                    content: '', 
-                    student_id: 0 
-                  }); 
-                  setShowLogModal(true); 
-                }}>
+                <button className="btn btn-primary btn-sm" onClick={() => { setEditingLog(null); setLogForm({ type: '회의록', date: new Date().toISOString().split('T')[0], time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), content: '', student_id: -1 }); setShowLogModal(true); }}>
                   <Plus size={14} /> 로그 추가
                 </button>
               </div>
-
               <div className="logs-timeline">
                 {teamTimeline.map(c => {
                   const student = students.find(s => s.id === c.student_id);
@@ -382,28 +333,11 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                              <span className="log-author">{c.isTeam ? '👥 팀 전체' : student?.name}</span>
                           </div>
                           <div className="log-actions">
-                             <button className="act-btn" onClick={() => { 
-                               setEditingLog(c); 
-                               setLogForm({ 
-                                 type: c.type, 
-                                 date: c.date.split('T')[0], 
-                                 time: c.date.includes('T') ? c.date.split('T')[1].slice(0, 5) : '00:00',
-                                 content: c.content, 
-                                 student_id: c.student_id 
-                               }); 
-                               setShowLogModal(true); 
-                             }}><Edit3 size={12} /></button>
-                             <button className="act-btn danger" onClick={() => { 
-                               if(confirm('삭제하시겠습니까?')) {
-                                 if (c.isTeam) deleteProjectLog(c.id);
-                                 else deleteConsultation(c.id);
-                               }
-                             }}><Trash2 size={12} /></button>
+                             <button className="act-btn" onClick={() => { setEditingLog(c); setLogForm({ type: c.type, date: c.date.split('T')[0], time: c.date.includes('T') ? c.date.split('T')[1].slice(0, 5) : '00:00', content: c.content, student_id: c.student_id }); setShowLogModal(true); }}><Edit3 size={12} /></button>
+                             <button className="act-btn danger" onClick={() => { if(confirm('삭제하시겠습니까?')) { if (c.isTeam) deleteProjectLog(c.id); else deleteConsultation(c.id); } }}><Trash2 size={12} /></button>
                           </div>
                        </div>
-                       <div className="log-body markdown-body">
-                          <ReactMarkdown>{c.content}</ReactMarkdown>
-                       </div>
+                       <div className="log-body markdown-body"><ReactMarkdown>{c.content}</ReactMarkdown></div>
                     </div>
                   );
                 })}
@@ -414,30 +348,16 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         </div>
       </div>
 
-      {/* Member Selector Modal */}
       {showMemberSelector && (
         <div className="modal-sub-overlay" onClick={() => setShowMemberSelector(false)}>
           <div className="modal-sub card" onClick={e => e.stopPropagation()}>
-            <div className="modal-sub-header">
-              <h3 style={{ fontSize: '18px', fontWeight: 900 }}>팀원 추가</h3>
-              <button className="btn btn-ghost" onClick={() => setShowMemberSelector(false)} style={{ position: 'absolute', top: '24px', right: '24px' }}><X size={20} /></button>
-            </div>
+            <div className="modal-sub-header"><h3>팀원 추가</h3></div>
             <div className="modal-sub-body">
-              <div className="search-wrap">
-                <Search size={14} className="s-icon" />
-                <input 
-                  className="form-input" 
-                  placeholder="이름으로 검색..." 
-                  value={memberSearch} 
-                  onChange={e => setMemberSearch(e.target.value)} 
-                  autoFocus 
-                />
-              </div>
+              <input className="form-input" placeholder="이름으로 검색..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)} autoFocus />
               <div className="m-list-scroll">
-                {students.filter(s => s.name.includes(memberSearch) && !members.some(m => m.student_id === s.id)).slice(0, 8).map(s => (
-                  <div key={s.id} className="m-item-choice" onClick={() => { addTeamMember(team.id, s.id); setShowMemberSelector(false); toast.success(`${s.name} 팀원 추가완료`); }}>
-                    <span>{s.name}</span>
-                    <Plus size={14} />
+                {students.filter(s => s.name.includes(memberSearch) && !members.some(m => m.student_id === s.id)).map(s => (
+                  <div key={s.id} className="m-item-choice" onClick={() => { addTeamMember(team.id, s.id); setShowMemberSelector(false); }}>
+                    <span>{s.name}</span><Plus size={14} />
                   </div>
                 ))}
               </div>
@@ -446,29 +366,25 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         </div>
       )}
 
-      {/* Log Modal */}
       {showLogModal && (
         <div className="modal-sub-overlay" onClick={() => setShowLogModal(false)}>
            <div className="modal-sub card" onClick={e => e.stopPropagation()}>
-              <div className="modal-sub-header">
-                 <h3 style={{ fontSize: '18px', fontWeight: 900 }}>{editingLog ? '로그 수정' : '활동 로그 추가'}</h3>
-                 <button className="btn btn-ghost" onClick={() => setShowLogModal(false)} style={{ position: 'absolute', top: '24px', right: '24px' }}><X size={20} /></button>
-              </div>
+              <div className="modal-sub-header"><h3>{editingLog ? '로그 수정' : '로그 추가'}</h3></div>
               <div className="modal-sub-body">
                  <div className="f-field">
                     <label>대상 팀원</label>
                     <select className="form-select" value={logForm.student_id} onChange={e => setLogForm(f => ({ ...f, student_id: Number(e.target.value) }))}>
-                       <option value={0}>기록 대상자 선택...</option>
-                       <option value={-1}>팀원 전체 (일괄 기록)</option>
+                       <option value={0}>선택...</option>
+                       <option value={-1}>팀원 전체</option>
                        {members.map(m => {
-                         const s = students.find(std => Number(std.id) === Number(m.student_id));
+                         const s = students.find(std => std.id === m.student_id);
                          return s ? <option key={m.id} value={s.id}>{s.name}</option> : null;
                        })}
                     </select>
                  </div>
                  <div className="f-field">
                     <label>내용</label>
-                    <textarea className="form-input" rows={4} value={logForm.content} onChange={e => setLogForm(f => ({ ...f, content: e.target.value }))} placeholder="내용기록..." />
+                    <textarea className="form-input" rows={4} value={logForm.content} onChange={e => setLogForm(f => ({ ...f, content: e.target.value }))} />
                  </div>
                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
                     <div className="f-field">
@@ -477,17 +393,27 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                     </div>
                     <div className="f-field">
                        <label>유형</label>
-                       <select className="form-select" value={logForm.type} onChange={e => setLogForm(f => ({ ...f, type: e.target.value as ConsultationType }))}>
-                          <option value="학습점검">개발로그</option>
-                          <option value="개인상담">피드백</option>
-                          <option value="기타">회의록</option>
+                       <select className="form-select" value={logForm.type} onChange={e => setLogForm(f => ({ ...f, type: e.target.value as any }))}>
+                          {logForm.student_id === -1 ? (
+                            <>
+                              <option value="회의록">회의록</option>
+                              <option value="멘토피드백">멘토피드백</option>
+                              <option value="진행보고">진행보고</option>
+                            </>
+                          ) : (
+                            <>
+                              <option value="학습점검">개발로그</option>
+                              <option value="개인상담">피드백</option>
+                              <option value="기타">기타</option>
+                            </>
+                          )}
                        </select>
                     </div>
                  </div>
               </div>
               <div className="modal-sub-footer">
                  <button className="btn btn-secondary" onClick={() => setShowLogModal(false)}>취소</button>
-                 <button className="btn btn-primary" onClick={handleLogSubmit}>{editingLog ? '수정' : '추가'}</button>
+                 <button className="btn btn-primary" onClick={handleLogSubmit}>저장</button>
               </div>
            </div>
         </div>
@@ -496,56 +422,23 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
       <style dangerouslySetInnerHTML={{ __html: `
         .panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; justify-content: flex-end; animation: fadeIn 0.2s; }
         .side-panel { width: 500px; height: 100%; background: var(--bg-surface); box-shadow: -15px 0 40px rgba(0,0,0,0.18); display: flex; flex-direction: column; overflow: hidden; animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
-        .panel-header { padding: 28px 24px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; position: relative; }
-        .header-left { display: flex; gap: 16px; align-items: center; }
-        .icon-badge { width: 46px; height: 46px; background: var(--accent-light); color: var(--accent); border-radius: 14px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-        .panel-title { font-size: 22px; font-weight: 950; margin: 0 0 4px; color: var(--text-primary); }
-        .panel-subtitle { font-size: 13px; color: var(--text-muted); font-weight: 600; }
-        .btn-close-large { background: none; border: none; color: var(--text-muted); cursor: pointer; padding: 4px; border-radius: 8px; transition: background 0.2s; }
-        .panel-tabs { display: flex; width: 100%; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
-        .p-tab { flex: 1; padding: 16px 0; border: none; background: none; font-size: 13px; font-weight: 800; color: var(--text-muted); border-bottom: 3px solid transparent; transition: all 0.2s; cursor: pointer; }
+        .panel-header { padding: 28px 24px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; }
+        .icon-badge { width: 46px; height: 46px; background: var(--accent-light); color: var(--accent); border-radius: 14px; display: flex; align-items: center; justify-content: center; }
+        .panel-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
+        .p-tab { flex: 1; padding: 16px 0; border: none; background: none; font-size: 13px; font-weight: 800; color: var(--text-muted); cursor: pointer; border-bottom: 3px solid transparent; }
         .p-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--bg-surface); }
         .panel-main-scroll { flex: 1; overflow-y: auto; padding: 24px; background: var(--bg-base); }
         .tab-stack { display: flex; flex-direction: column; gap: 28px; }
-        .p-section { display: flex; flex-direction: column; gap: 14px; }
-        .s-title { font-size: 12px; font-weight: 800; color: var(--text-muted); display: flex; align-items: center; gap: 8px; margin: 0; text-transform: uppercase; letter-spacing: 0.5px; }
-        .s-between { display: flex; justify-content: space-between; align-items: center; }
-        .status-card { padding: 24px; background: var(--bg-surface); border-radius: 18px; border: 1.5px solid var(--border); }
-        .prog-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px; }
+        .s-title { font-size: 12px; font-weight: 800; color: var(--text-muted); display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
+        .status-card { padding: 20px; background: var(--bg-surface); border-radius: 18px; border: 1.5px solid var(--border); }
+        .prog-head { display: flex; justify-content: space-between; align-items: baseline; }
         .accent-text { font-size: 26px; font-weight: 900; color: var(--accent); }
-        .prog-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 12px; }
         .card-flat { padding: 16px; background: var(--bg-surface); border-radius: 12px; border: 1.5px solid var(--border); }
-        .f-label { display: block; font-size: 11px; font-weight: 800; color: var(--text-muted); margin-bottom: 8px; }
-        .input-with-action { display: flex; gap: 8px; }
-        .selector-overlay { display: none; }
-        .modal-sub-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center; padding: 20px; animation: fadeIn 0.2s; }
-        .modal-sub { background: var(--bg-surface); border-radius: 24px; width: 100%; max-width: 440px; box-shadow: 0 30px 60px rgba(0,0,0,0.3); position: relative; }
-        .modal-sub-header { padding: 28px 24px 12px; }
-        .modal-sub-body { padding: 24px; display: flex; flex-direction: column; gap: 20px; }
-        .modal-sub-footer { padding: 20px 24px; background: var(--bg-elevated); display: flex; justify-content: flex-end; gap: 10px; border-bottom-left-radius: 24px; border-bottom-right-radius: 24px; }
-        .m-list-scroll { display: flex; flex-direction: column; gap: 4px; max-height: 240px; overflow-y: auto; margin-top: 12px; }
-        .m-item-choice { padding: 12px; font-size: 14px; font-weight: 700; display: flex; justify-content: space-between; border-radius: 12px; cursor: pointer; transition: all 0.2s; background: var(--bg-elevated); }
-        .m-item-choice:hover { background: var(--accent); color: white; }
-        .member-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-        .m-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg-surface); border: 1.5px solid var(--border); border-radius: 14px; cursor: pointer; position: relative; }
-        .m-avatar { width: 32px; height: 32px; background: var(--accent-light); color: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 900; }
-        .m-name { font-size: 13px; font-weight: 800; }
-        .m-role-input { border: none; background: transparent; font-size: 11px; color: var(--text-muted); font-weight: 600; width: 100%; outline: none; padding: 2px 0; border-bottom: 1px solid transparent; transition: border-bottom 0.2s; }
-        .m-role-input:focus { border-bottom-color: var(--accent); color: var(--text-primary); }
-        .score-summary-card { padding: 24px; background: var(--accent); color: white; border-radius: 20px; }
-        .total-hero { display: flex; alignItems: center; gap: 16px; margin-top: 12px; }
-        .total-num { font-size: 42px; font-weight: 900; }
-        .cat-entry-row { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--border); }
-        .cat-entry-row:last-child { border-bottom: none; }
-        .cat-label { font-size: 14px; font-weight: 700; }
-        .log-card { padding: 20px; background: var(--bg-surface); border-radius: 16px; border: 1.5px solid var(--border); }
+        .modal-sub-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.2s; }
+        .modal-sub { background: var(--bg-surface); border-radius: 24px; width: 440px; box-shadow: 0 30px 60px rgba(0,0,0,0.3); }
+        .log-card { padding: 20px; background: var(--bg-surface); border-radius: 16px; border: 1.5px solid var(--border); margin-bottom: 16px; }
         .log-card.is-team { border-left: 4px solid var(--accent); background: var(--accent-light); }
-        .log-actions { display: flex; gap: 8px; }
-        .act-btn { background: var(--bg-elevated); border: none; padding: 6px; border-radius: 6px; cursor: pointer; color: var(--text-muted); }
-        .act-btn:hover { color: var(--accent); }
-        .search-wrap { position: relative; }
-        .s-icon { position: absolute; left: 12px; top: 12px; color: var(--text-muted); }
-        .search-wrap .form-input { padding-left: 36px; }
+        .total-hero { display: flex; alignItems: center; gap: 16px; }
         
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }

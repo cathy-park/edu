@@ -49,6 +49,7 @@ interface DataContextType {
   updateConsultation: (id: number, data: Partial<Consultation>) => Promise<void>;
   deleteConsultation: (id: number) => Promise<void>;
 
+  updateTeamProjectScore: (teamId: number, projectId: number, categoryScores: Record<string, number>, teamScore: number) => Promise<void>;
   updateTeamProgress: (teamId: number, progress: number) => Promise<void>;
   updateTeamScore: (teamId: number, score: number) => Promise<void>;
   addProjectCategory: (projectId: number, label: string) => Promise<void>;
@@ -470,18 +471,32 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (!error) setTeams(prev => prev.map(t => t.id === teamId ? { ...t, progress_pct: progress } : t));
   };
 
-  const updateTeamScore = async (teamId: number, score: number) => {
-    // This is a bulk update of students in a team
+  const updateTeamProjectScore = async (teamId: number, projectId: number, categoryScores: Record<string, number>, teamScore: number) => {
+    // Bulk update for all members of the team
     const members = teamMembers.filter(m => m.team_id === teamId);
+    
+    // Average score calculation
+    const cats = Object.values(categoryScores);
+    const avg = cats.length > 0 ? cats.reduce((a, b) => a + b, 0) / cats.length : 0;
+    const finalAvg = Math.round(avg * 2) / 2;
+
+    try {
+      const updatePromises = members.map(m => 
+        updateProjectScore(m.student_id, projectId, categoryScores, teamScore)
+      );
+      await Promise.all(updatePromises);
+      toast.success('팀 전체 성적이 일괄 업데이트되었습니다.');
+    } catch (err) {
+      console.error('Team score update error:', err);
+      toast.error('팀 성적 업데이트 중 실채했습니다');
+    }
+  };
+
+  const updateTeamScore = async (teamId: number, score: number) => {
+    // Legacy support or simplified variant
     const team = teams.find(t => t.id === teamId);
     if (!team) return;
-
-    for (const m of members) {
-      const student = students.find(s => s.id === m.student_id);
-      const scoreObj = student?.project_scores.find(ps => ps.project_id === team.project_id);
-      await updateProjectScore(m.student_id, team.project_id, scoreObj?.category_scores || {}, score);
-    }
-    toast.success('팀 전체 성적이 업데이트되었습니다.');
+    await updateTeamProjectScore(teamId, team.project_id, {}, score);
   };
 
   const addProjectLog = async (log: any) => {
@@ -813,7 +828,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       students, projects, teams, consultations, tags, teamMembers, workTasks, todos, schedules, projectLogs, stages, isLoading,
       addStudent, updateStudent, deleteStudent, updateStudentTags,
       addTeam, updateTeam, deleteTeam, addTeamMember, updateTeamMemberRole, removeTeamMember,
-      updateProjectScore, addConsultation, updateConsultation, deleteConsultation, 
+      updateProjectScore, updateTeamProjectScore, addConsultation, updateConsultation, deleteConsultation, 
       updateTeamProgress, updateTeamScore,
       addProjectCategory, deleteProjectCategory, deleteProject, updateProject, addProject,
       addProjectLog, updateProjectLog, deleteProjectLog,
