@@ -10,7 +10,7 @@ import toast from 'react-hot-toast';
 import { useData } from '@/context/DataContext';
 import ReactMarkdown from 'react-markdown';
 import ConsultationModal from '../common/ConsultationModal';
-import { format, parseISO } from 'date-fns';
+import { formatDateTime } from '@/lib/utils';
 
 interface Props {
   student: Student;
@@ -66,18 +66,6 @@ export default function StudentDetailPanel({
     } catch (error) {}
   };
 
-  // Fix 2: Foolproof Date Format YYYY-MM-DD HH:mm
-  const formatShortDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    try {
-      const dateOnly = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.split(' ')[0];
-      const timeOnly = dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : dateStr.split(' ')[1]?.slice(0, 5) || '00:00';
-      return `${dateOnly} ${timeOnly}`;
-    } catch {
-      return dateStr.slice(0, 16).replace('T', ' ');
-    }
-  };
-
   return (
     <div className="detail-panel-overlay" onClick={onClose}>
       <div className="detail-panel" onClick={e => e.stopPropagation()}>
@@ -86,7 +74,7 @@ export default function StudentDetailPanel({
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--text-primary)' }}><X size={24} /></button>
           <div className="detail-avatar">{student.name[0]}</div>
           <div>
-            <h2 style={{ fontSize: 20, margin: 0 }}>{student.name} <small style={{fontSize: 10, opacity: 0.3}}>v8.25</small></h2>
+            <h2 style={{ fontSize: 20, margin: 0 }}>{student.name} <small style={{fontSize: 10, opacity: 0.3}}>v8.25 Final</small></h2>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{student.cohort?.name} · {student.email}</div>
           </div>
         </div>
@@ -161,7 +149,7 @@ export default function StudentDetailPanel({
                      <div key={`hist-f-item-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}`, background: 'var(--bg-elevated)', padding: 12, borderRadius: 8 }}>
                         <div className="consult-meta">
                            <span className="badge">{c.type}</span>
-                           <span>{formatShortDate(c.date)}</span>
+                           <span>{formatDateTime(c.date)}</span>
                            <span style={{ fontWeight: 700 }}>{c.isTeam ? `👥 ${c.team_name}` : '👤 개인 피드백'}</span>
                            {!c.isTeam && (
                              <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>

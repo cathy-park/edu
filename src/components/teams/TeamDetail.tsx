@@ -9,8 +9,8 @@ import { StarRating } from '@/components/common/StarRating';
 import { useData } from '@/context/DataContext';
 import toast from 'react-hot-toast';
 import ReactMarkdown from 'react-markdown';
-import { getStageColorClass } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
+import { getStageColorClass, formatDateTime } from '@/lib/utils';
+import { format } from 'date-fns';
 
 interface Props {
   team: Team;
@@ -46,7 +46,6 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
   const [categoryScores, setCategoryScores] = useState<Record<string, number>>({});
 
-  // Fix 1: Consistent Key Generation for Score Isolation
   const getCatKey = (cat: any, idx: number) => cat.id || `idx-${idx}`;
 
   useEffect(() => {
@@ -71,7 +70,6 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     }
   }, [logForm.student_id]);
 
-  // Fix 1-b: Compute average using the SAME key logic
   const overallScore = useMemo(() => {
     if (!project?.score_categories || project.score_categories.length === 0) return 0;
     const total = project.score_categories.reduce((acc, cat, idx) => {
@@ -107,7 +105,6 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         toast.success('기록이 수정되었습니다');
       } else {
         if (Number(logForm.student_id) === -1) {
-          // Fix 3: Ensure team_id is strictly passed
           await addProjectLog({ team_id: team.id, log_date: logForm.date, type: logForm.type as any, content: logForm.content, title: logForm.type });
           toast.success('팀 활동 로그가 추가되었습니다');
         } else {
@@ -130,19 +127,6 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     return [...individualLogs, ...teamLogs].sort((a, b) => b.date.localeCompare(a.date));
   }, [consultations, projectLogs, members, team.id, team.project_id]);
 
-  // Fix 2: Foolproof Date Format YYYY-MM-DD HH:mm
-  const formatShortDate = (dateStr: string) => {
-    if (!dateStr) return '';
-    try {
-      // Input: 2026-04-08T00:00:00+00:00 or 2026-04-08 20:01
-      const dateOnly = dateStr.includes('T') ? dateStr.split('T')[0] : dateStr.split(' ')[0];
-      const timeOnly = dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : dateStr.split(' ')[1]?.slice(0, 5) || '00:00';
-      return `${dateOnly} ${timeOnly}`;
-    } catch {
-      return dateStr.slice(0, 16).replace('T', ' ');
-    }
-  };
-
   return (
     <div className="detail-panel-overlay" onClick={onClose}>
       <div className="detail-panel" onClick={e => e.stopPropagation()}>
@@ -151,7 +135,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--text-primary)' }}><X size={24} /></button>
           <div className="detail-avatar">{team.team_name[0]}</div>
           <div>
-            <h2 style={{ fontSize: 20, margin: 0 }}>{team.team_name} <small style={{fontSize: 10, opacity: 0.3}}>v8.25</small></h2>
+            <h2 style={{ fontSize: 20, margin: 0 }}>{team.team_name} <small style={{fontSize: 10, opacity: 0.3}}>v8.25 Final</small></h2>
             <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{project?.name}</div>
           </div>
         </div>
@@ -256,7 +240,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                      <div key={`log-i-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}`, background: 'var(--bg-elevated)', padding: 12, borderRadius: 8 }}>
                         <div className="consult-meta">
                            <span className="badge">{c.type}</span>
-                           <span>{formatShortDate(c.date)}</span>
+                           <span>{formatDateTime(c.date)}</span>
                            <span style={{ fontWeight: 700 }}>{c.isTeam ? `👥 ${team.team_name}` : `👤 ${students.find(s=>s.id===Number(c.student_id))?.name || '개인'}`}</span>
                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
                               <button onClick={() => { setEditingLog(c); setLogForm({ type: c.type, date: c.date.split('T')[0], time: c.date.includes('T') ? c.date.split('T')[1].slice(0, 5) : '00:00', content: c.content, student_id: c.student_id }); setShowLogModal(true); }} style={{ padding: 2, background: 'none', border: 'none', color: 'var(--text-muted)' }}><Edit3 size={12} /></button>
@@ -294,7 +278,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
       {showLogModal && (
         <div className="modal-overlay" onClick={() => setShowLogModal(false)}>
            <div className="modal card" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
-              <div className="modal-header"><h3 className="modal-title">{editingLog ? '기록 수정' : '활동 로그 가'}</h3></div>
+              <div className="modal-header"><h3 className="modal-title">{editingLog ? '기록 수정' : '활동 로그 추가'}</h3></div>
               <div className="modal-body">
                  <div className="form-field">
                     <label className="form-label">대상</label>
