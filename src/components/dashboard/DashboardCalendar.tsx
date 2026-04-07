@@ -4,11 +4,13 @@ import { useState } from 'react';
 import {
   format, startOfMonth, endOfMonth, startOfWeek, endOfWeek,
   addDays, addMonths, subMonths, isSameMonth, isToday, isSameDay,
+  differenceInDays, parseISO
 } from 'date-fns';
 import { ko } from 'date-fns/locale';
 import { ChevronLeft, ChevronRight, Plus, Edit3, Calendar as CalIcon } from 'lucide-react';
 import { Schedule, Todo } from '@/lib/types';
 import ScheduleModal from './ScheduleModal';
+import toast from 'react-hot-toast';
 
 interface Props {
   schedules: Schedule[];
@@ -18,12 +20,12 @@ interface Props {
   onDelete: (id: number) => void;
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
-  // v8.28: Support project date updates from calendar
   onUpdateProjectDate?: (id: number, start: string, end: string) => Promise<void>;
+  onUpdateSchedule?: (id: number, data: Partial<Schedule>) => Promise<void>;
 }
 
 export default function DashboardCalendar({ 
-  schedules, todos, onAdd, onUpdate, onDelete, selectedDate, onSelectDate, onUpdateProjectDate 
+  schedules, todos, onAdd, onUpdate, onDelete, selectedDate, onSelectDate, onUpdateProjectDate, onUpdateSchedule 
 }: Props) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
@@ -63,9 +65,46 @@ export default function DashboardCalendar({
     return [...daySchedules, ...todoEvents] as (Schedule & { is_start: boolean, is_project?: boolean, originalProjectId?: number })[];
   };
 
+  // v8.30: Drag and Drop Logic
+  const handleDragStart = (e: React.DragEvent, event: any) => {
+    e.dataTransfer.setData('text/plain', JSON.stringify({
+      id: event.id,
+      isProject: !!event.is_project,
+      originalProjectId: event.originalProjectId,
+      title: event.title,
+      start: event.start_date,
+      end: event.end_date || event.start_date
+    }));
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDrop = async (e: React.DragEvent, targetDate: string) => {
+    e.preventDefault();
+    try {
+      const raw = e.dataTransfer.getData('text/plain');
+      if (!raw) return;
+      const data = JSON.parse(raw);
+      
+      const oldStart = parseISO(data.start.split('T')[0]);
+      const newStart = parseISO(targetDate);
+      const diff = differenceInDays(newStart, oldStart);
+      
+      const movedStart = format(addDays(parseISO(data.start.split('T')[0]), diff), 'yyyy-MM-dd');
+      const movedEnd = format(addDays(parseISO(data.end.split('T')[0]), diff), 'yyyy-MM-dd');
+
+      if (data.isProject && data.originalProjectId && onUpdateProjectDate) {
+        await onUpdateProjectDate(data.originalProjectId, movedStart, movedEnd);
+      } else if (!data.isProject && data.id > 0 && onUpdateSchedule) {
+        await onUpdateSchedule(data.id, { start_date: movedStart, end_date: movedEnd });
+      }
+    } catch (err) {
+      console.error('Drop error:', err);
+    }
+  };
+
   const handleSave = (data: Omit<Schedule, 'id' | 'created_at'>) => {
-    if (modal?.mode === 'edit') { onUpdate(modal.schedule.id, data); } 
-    else { onAdd(data); }
+    if (modal?.mode === 'edit') onUpdate(modal.schedule.id, data);
+    else onAdd(data);
     setModal(null);
   };
 
@@ -100,6 +139,8 @@ export default function DashboardCalendar({
                 onMouseEnter={() => setHoveredDay(dateStr)}
                 onMouseLeave={() => setHoveredDay(null)}
                 onClick={() => onSelectDate(day)}
+                onDragOver={e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; }}
+                onDrop={e => handleDrop(e, dateStr)}
                 style={{ position: 'relative', cursor: 'pointer' }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
@@ -116,7 +157,11 @@ export default function DashboardCalendar({
                   const isProject = ev.is_project;
                   
                   return (
-                    <div key={ev.id} className={`cal-event ev-${ev.category} ${!isStart ? 'duration-bar' : ''}`} title={ev.title}
+                    <div key={ev.id} 
+                      className={`cal-event ev-${ev.category} ${!isStart ? 'duration-bar' : ''}`} 
+                      title={`${ev.title}\n(드래그하여 이동 가능)`}
+                      draggable={!isTodo}
+                      onDragStart={e => handleDragStart(e, ev)}
                       onClick={(e) => { 
                         if (isTodo) return;
                         e.stopPropagation(); 
@@ -130,10 +175,10 @@ export default function DashboardCalendar({
                         backgroundColor: ev.color ? `${ev.color}33` : undefined,
                         borderLeftColor: ev.color || undefined,
                         color: ev.color || undefined,
-                        position: 'relative'
+                        cursor: isTodo ? 'default' : 'move'
                       }}>
                       {isStart && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%', pointerEvents: 'none' }}>
                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.title}</span>
                            {isProject && <Edit3 size={10} style={{ opacity: 0.6 }} />}
                         </div>
