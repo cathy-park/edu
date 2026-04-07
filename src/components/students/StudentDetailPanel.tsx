@@ -114,9 +114,9 @@ export default function StudentDetailPanel({
                 </section>
                 <section className="detail-section">
                    <div className="detail-section-title">메모</div>
-                   <div className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, fontSize: 13 }}>
-                      <ReactMarkdown className="markdown-body">{student.note || '기록된 메모가 없습니다.'}</ReactMarkdown>
-                   </div>
+                    <div className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, fontSize: 13 }}>
+                       <div className="markdown-body"><ReactMarkdown>{student.note || '기록된 메모가 없습니다.'}</ReactMarkdown></div>
+                    </div>
                 </section>
              </>
            )}
