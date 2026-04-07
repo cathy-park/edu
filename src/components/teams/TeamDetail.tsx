@@ -142,8 +142,8 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
           <button onClick={onClose} style={{ position: 'absolute', top: 16, right: 16, background: 'none', border: 'none', color: 'var(--text-muted)' }}><X size={24} /></button>
           <div className="detail-avatar">{team.team_name[0]}</div>
           <div>
-            <h2 style={{ fontSize: 20, margin: 0 }}>{team.team_name}</h2>
-            <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{project?.name}</div>
+              <h2 style={{ fontSize: 20, margin: 0 }}>{team.team_name} <small style={{fontSize: 10, opacity: 0.3}}>v8.23</small></h2>
+              <div style={{ fontSize: 13, color: 'var(--text-muted)' }}>{project?.name}</div>
           </div>
         </div>
 
