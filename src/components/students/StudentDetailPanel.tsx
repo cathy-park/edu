@@ -35,7 +35,7 @@ export default function StudentDetailPanel({
   const [showConsModal, setShowConsModal] = useState(false);
   const [editingCons, setEditingCons] = useState<Consultation | null>(null);
 
-  // Merged Timeline (Team Logs + Individual Logs)
+  // Fix 2: Team Name Mapping and Date Format (YYYY-MM-DD HH:mm)
   const studentTimeline = useMemo(() => {
     const individual = allConsultations
       .filter(c => Number(c.student_id) === Number(currentStudentId))
@@ -45,7 +45,7 @@ export default function StudentDetailPanel({
       const t = teams.find(team => team.id === pl.team_id);
       return { 
         ...pl, isTeam: true, date: pl.log_date, student_id: currentStudentId, consulted_at: pl.log_date,
-        type: pl.type || '회의록', team_name: t?.team_name || '팀'
+        type: pl.type || '회의록', team_name: t?.team_name || '소속 팀'
       };
     });
     return [...individual, ...teamInLogs].sort((a, b) => b.date.localeCompare(a.date));
@@ -65,13 +65,14 @@ export default function StudentDetailPanel({
     } catch (error) {}
   };
 
+  // Fixed Date Format: yyyy-MM-dd HH:mm
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
     try {
       const d = parseISO(dateStr.replace(' ', 'T'));
-      return format(d, 'MM-dd HH:mm');
+      return format(d, 'yyyy-MM-dd HH:mm');
     } catch {
-      return dateStr.slice(5, 16);
+      return dateStr.slice(0, 16).replace('T', ' ');
     }
   };
 
@@ -88,12 +89,11 @@ export default function StudentDetailPanel({
           </div>
         </div>
 
-        {/* Tab Buttons - CSS Compatible */}
         <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
           {[
-            { id: 'info', label: '정보', icon: User },
-            { id: 'projects', label: '성취도', icon: Award },
-            { id: 'consultations', label: '상담/활동', icon: MessageSquare }
+            { id: 'info', label: '상세 프로필', icon: User },
+            { id: 'projects', label: '성취도 분석', icon: Award },
+            { id: 'consultations', label: '활동 피드', icon: MessageSquare }
           ].map(tab => (
             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} style={{ flex: 1, padding: '16px 0', border: 'none', background: 'none', fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500, color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)', borderBottom: `2px solid ${activeTab === tab.id ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
               <tab.icon size={14} /> {tab.label}
@@ -105,18 +105,18 @@ export default function StudentDetailPanel({
            {activeTab === 'info' && (
              <>
                 <section className="detail-section">
-                   <div className="detail-section-title">기본 정보</div>
+                   <div className="detail-section-title">연락처 및 등록 정보</div>
                    <div className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12 }}>
                       <div className="detail-row"><span className="detail-label">휴대전화</span><span className="detail-value">{student.phone || '-'}</span></div>
-                      <div className="detail-row"><span className="detail-label">입과일</span><span className="detail-value">{student.joined_at || '-'}</span></div>
-                      <div className="detail-row"><span className="detail-label">상태</span><span className={`badge badge-${student.status}`}>{student.status}</span></div>
+                      <div className="detail-row"><span className="detail-label">가입 일자</span><span className="detail-value">{student.joined_at || '-'}</span></div>
+                      <div className="detail-row"><span className="detail-label">현재 상태</span><span className={`badge badge-${student.status}`}>{student.status}</span></div>
                    </div>
                 </section>
                 <section className="detail-section">
-                   <div className="detail-section-title">메모</div>
-                    <div className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, fontSize: 13 }}>
-                       <div className="markdown-body"><ReactMarkdown>{student.note || '기록된 메모가 없습니다.'}</ReactMarkdown></div>
-                    </div>
+                   <div className="detail-section-title">학생 관리 비고</div>
+                   <div className="card" style={{ padding: 16, background: 'var(--bg-elevated)', borderRadius: 12, fontSize: 13 }}>
+                      <div className="markdown-body"><ReactMarkdown>{student.note || '기록된 메모가 없습니다.'}</ReactMarkdown></div>
+                   </div>
                 </section>
              </>
            )}
@@ -124,8 +124,8 @@ export default function StudentDetailPanel({
            {activeTab === 'projects' && (
              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                   <div className="detail-section-title">학업 성취도</div>
-                   <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)' }}>GPA {calculateGPA()}</div>
+                   <div className="detail-section-title">학업 성취도 종합 (GPA)</div>
+                   <div style={{ fontSize: 18, fontWeight: 900, color: 'var(--accent)' }}>평균 {calculateGPA()}</div>
                 </div>
                 {student.project_scores.map(score => {
                    const proj = projects.find(p => p.id === score.project_id);
@@ -137,7 +137,7 @@ export default function StudentDetailPanel({
                         </div>
                         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                            {proj?.score_categories.map(cat => (
-                             <div key={`cat-${cat.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                             <div key={`cat-student-${cat.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                                 <span style={{ fontSize: 11, color: 'var(--text-secondary)' }}>{cat.label}</span>
                                 <StarRating value={Number(score.category_scores?.[cat.id] || 0)} readonly size={11} />
                              </div>
@@ -152,15 +152,15 @@ export default function StudentDetailPanel({
            {activeTab === 'consultations' && (
              <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                 <button className="btn btn-primary" style={{ height: 40, gap: 8 }} onClick={() => { setEditingCons(null); setShowConsModal(true); }}>
-                   <Plus size={16} /> 기록 추가하기
+                   <Plus size={16} /> 신규 활동 기록 추가
                 </button>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                    {studentTimeline.map((c: any) => (
-                     <div key={`hist-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}` }}>
+                     <div key={`hist-feed-${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: `4px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}` }}>
                         <div className="consult-meta">
                            <span className="badge">{c.type}</span>
                            <span>{formatShortDate(c.date)}</span>
-                           <span style={{ fontWeight: 700 }}>{c.isTeam ? `${c.team_name} (팀 활동)` : '개인 상담'}</span>
+                           <span style={{ fontWeight: 700 }}>{c.isTeam ? `👥 ${c.team_name}` : '👤 개인 피드백'}</span>
                            {!c.isTeam && (
                              <div style={{ marginLeft: 'auto', display: 'flex', gap: 4 }}>
                                <button onClick={() => { setEditingCons(c); setShowConsModal(true); }} style={{ padding: 2, background: 'none', border: 'none', color: 'var(--text-muted)' }}><Edit3 size={12} /></button>
