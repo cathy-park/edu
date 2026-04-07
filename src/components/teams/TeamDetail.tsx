@@ -209,23 +209,6 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                   <button className="btn btn-ghost btn-sm" onClick={() => setShowMemberSelector(true)}><UserPlus size={14} /> 추가</button>
                 </div>
 
-                {showMemberSelector && (
-                  <div className="selector-overlay card">
-                    <div className="search-wrap">
-                      <Search size={14} className="s-icon" />
-                      <input className="form-input" placeholder="이름 검색..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)} autoFocus />
-                      <button className="btn-close-mini" onClick={() => setShowMemberSelector(false)}><X size={14} /></button>
-                    </div>
-                    <div className="m-list-scroll">
-                       {students.filter(s => !members.some(m => m.student_id === s.id) && s.name.includes(memberSearch)).slice(0, 5).map(s => (
-                         <div key={s.id} className="m-item-choice" onClick={() => { addTeamMember(team.id, s.id); setShowMemberSelector(false); toast.success('추가되었습니다'); }}>
-                           {s.name} <Plus size={14} />
-                         </div>
-                       ))}
-                    </div>
-                  </div>
-                )}
-
                 <div className="member-grid">
                   {members.map(m => {
                     const s = students.find(std => std.id === m.student_id);
@@ -267,13 +250,30 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                  </div>
 
                  <div className="cats-list-entry">
-                    {project?.score_categories.map(cat => (
-                      <div key={cat.id} className="cat-entry-row">
-                        <div className="cat-meta">
-                           <span className="cat-label">{cat.label}</span>
-                           <button className="btn-del-cat" onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteProjectCategory(project.id, cat.id); }}><Minus size={12} /></button>
+                    {(project?.stages || []).map((stage, idx) => {
+                      const catId = stage.toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '');
+                      return (
+                        <div key={catId} className="cat-entry-row">
+                          <div className="cat-meta">
+                            <span className="cat-label">{idx + 1}. {stage}</span>
+                          </div>
+                          <input 
+                            type="number" 
+                            className="form-input-mini" 
+                            placeholder="점수"
+                            value={categoryScores[catId] || ''} 
+                            onChange={e => setCategoryScores(prev => ({ ...prev, [catId]: Number(e.target.value) }))} 
+                          />
                         </div>
-                        <StarRating value={categoryScores[cat.id] || 0} onChange={v => setCategoryScores(p => ({ ...p, [cat.id]: v }))} size={20} />
+                      );
+                    })}
+                    {project?.score_categories.filter(c => !(project?.stages || []).includes(c.label)).map(c => (
+                      <div key={c.id} className="cat-entry-row">
+                        <div className="cat-meta">
+                           <span className="cat-label">{c.label}</span>
+                           <button className="btn-del-cat" onClick={(e) => { e.preventDefault(); e.stopPropagation(); deleteProjectCategory(project.id, c.id); }}><Minus size={12} /></button>
+                        </div>
+                        <StarRating value={categoryScores[c.id] || 0} onChange={v => setCategoryScores(p => ({ ...p, [c.id]: v }))} size={20} />
                       </div>
                     ))}
                  </div>
@@ -337,8 +337,8 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                        <option value={0}>기록 대상자 선택...</option>
                        <option value={-1}>팀원 전체 (일괄 기록)</option>
                        {members.map(m => {
-                         const student = students.find(s => s.id === m.student_id);
-                         return <option key={m.id} value={m.student_id}>{student?.name}</option>;
+                         const s = students.find(std => Number(std.id) === Number(m.student_id));
+                         return s ? <option key={m.id} value={s.id}>{s.name}</option> : null;
                        })}
                     </select>
                  </div>
@@ -399,7 +399,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         .f-label { display: block; font-size: 11px; font-weight: 800; color: var(--text-muted); margin-bottom: 8px; }
         .input-with-action { display: flex; gap: 8px; }
         .btn-icon { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; border-radius: 8px; }
-        .selector-overlay { padding: 12px; border-color: var(--accent); position: absolute; left: 24px; width: 400px; z-index: 10; margin-top: -8px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .selector-overlay { display: none; }
         .search-wrap { position: relative; margin-bottom: 8px; }
         .s-icon { position: absolute; left: 10px; top: 12px; color: var(--text-muted); }
         .search-wrap .form-input { padding-left: 32px; height: 38px; font-size: 13px; }
