@@ -86,7 +86,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     toast.success('평가 항목이 추가되었습니다');
   };
 
-  const handleLogSubmit = () => {
+  const handleLogSubmit = async () => {
     if (!logForm.content.trim() || logForm.student_id === 0) return toast.error('내용과 수강생을 선택하세요');
     
     if (editingLog) {
@@ -98,22 +98,37 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
       });
       toast.success('로그가 수정되었습니다');
     } else {
-      addConsultation({
-        student_id: logForm.student_id,
-        content: logForm.content,
-        consulted_at: logForm.date,
-        type: logForm.type
-      });
-      toast.success('상담 로그가 추가되었습니다');
+      if (logForm.student_id === -1) {
+        // All members bulk insert
+        for (const m of members) {
+          await addConsultation({
+            student_id: m.student_id,
+            project_id: team.project_id,
+            content: logForm.content,
+            consulted_at: logForm.date,
+            type: logForm.type
+          });
+        }
+        toast.success(`팀원 전체(${members.length}명)에게 로그가 기록되었습니다`);
+      } else {
+        await addConsultation({
+          student_id: logForm.student_id,
+          project_id: team.project_id,
+          content: logForm.content,
+          consulted_at: logForm.date,
+          type: logForm.type
+        });
+        toast.success('활동 로그가 추가되었습니다');
+      }
     }
     setShowLogModal(false);
   };
 
   const teamConsultations = useMemo(() => {
     const memberIds = members.map(m => m.student_id);
-    return consultations.filter(c => memberIds.includes(c.student_id))
+    return consultations.filter(c => memberIds.includes(c.student_id) && c.project_id === team.project_id)
       .sort((a, b) => b.consulted_at.localeCompare(a.consulted_at));
-  }, [consultations, members]);
+  }, [consultations, members, team.project_id]);
 
   return (
     <div className="panel-overlay" onClick={onClose}>
@@ -191,7 +206,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
               <section className="p-section">
                 <div className="s-between">
                   <h4 className="s-title"><Users size={16} /> 팀 구성원 ({members.length})</h4>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setShowMemberSelector(true)}><UserPlus size={14} /> 초대</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => setShowMemberSelector(true)}><UserPlus size={14} /> 추가</button>
                 </div>
 
                 {showMemberSelector && (
@@ -320,6 +335,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                     <label>대상 팀원</label>
                     <select className="form-select" value={logForm.student_id} onChange={e => setLogForm(f => ({ ...f, student_id: Number(e.target.value) }))}>
                        <option value={0}>기록 대상자 선택...</option>
+                       <option value={-1}>팀원 전체 (일괄 기록)</option>
                        {members.map(m => {
                          const student = students.find(s => s.id === m.student_id);
                          return <option key={m.id} value={m.student_id}>{student?.name}</option>;
@@ -383,7 +399,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         .f-label { display: block; font-size: 11px; font-weight: 800; color: var(--text-muted); margin-bottom: 8px; }
         .input-with-action { display: flex; gap: 8px; }
         .btn-icon { width: 38px; height: 38px; display: flex; align-items: center; justify-content: center; padding: 0; flex-shrink: 0; border-radius: 8px; }
-        .selector-overlay { padding: 12px; border-color: var(--accent); position: absolute; left: 24px; right: 24px; z-index: 10; margin-top: -8px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
+        .selector-overlay { padding: 12px; border-color: var(--accent); position: absolute; left: 24px; width: 400px; z-index: 10; margin-top: -8px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); }
         .search-wrap { position: relative; margin-bottom: 8px; }
         .s-icon { position: absolute; left: 10px; top: 12px; color: var(--text-muted); }
         .search-wrap .form-input { padding-left: 32px; height: 38px; font-size: 13px; }

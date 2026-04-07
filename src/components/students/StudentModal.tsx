@@ -3,7 +3,7 @@
 import { X, Plus } from 'lucide-react';
 import { Student, StudentStatus } from '@/lib/types';
 import { mockCohorts } from '@/lib/mockData';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useData } from '@/context/DataContext';
 import { useCohort } from '@/context/CohortContext';
@@ -24,22 +24,41 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
 
   const initialTags = student ? allTags.filter(t => t.student_id === student.id).map(t => t.tag) : [];
   
-  // Find current cohort id for default selection
-  const defaultCohortId = student?.cohort_id?.toString() ?? 
-                         cohorts.find(c => c.name === selectedCohort)?.id?.toString() ?? 
-                         cohorts[0]?.id?.toString() ?? "";
+  const getInitialCohortId = () => {
+    if (student?.cohort_id) return student.cohort_id.toString();
+    const found = cohorts.find(c => c.name === selectedCohort);
+    if (found) return found.id.toString();
+    return cohorts[0]?.id?.toString() ?? "";
+  };
 
   const [form, setForm] = useState({
     name: student?.name ?? '',
     age: student?.age?.toString() ?? '',
     phone: student?.phone ?? '',
     email: student?.email ?? '',
-    cohort_id: defaultCohortId,
+    cohort_id: getInitialCohortId(),
     status: (student?.status ?? '수강중') as StudentStatus,
     experience: student?.experience ?? '비전공자',
     experience_detail: student?.experience_detail ?? '',
     note: student?.note ?? '',
   });
+
+  // Effect to sync form when student prop changes (reinforcement)
+  useEffect(() => {
+    if (student) {
+      setForm({
+        name: student.name,
+        age: student.age?.toString() ?? '',
+        phone: student.phone ?? '',
+        email: student.email ?? '',
+        cohort_id: student.cohort_id?.toString() ?? getInitialCohortId(),
+        status: student.status,
+        experience: student.experience ?? '비전공자',
+        experience_detail: student.experience_detail ?? '',
+        note: student.note ?? '',
+      });
+    }
+  }, [student, cohorts, selectedCohort]);
 
   const [tags, setTags] = useState<string[]>(initialTags);
   const [tagInput, setTagInput] = useState('');
@@ -157,7 +176,7 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
           </div>
 
           <div className="form-field full" style={{ marginTop: 12 }}>
-            <label className="form-label">역량 태그</label>
+            <label className="form-label">관심 분야</label>
             <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
               <input 
                 className="form-input" 

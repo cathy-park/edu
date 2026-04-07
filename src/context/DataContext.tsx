@@ -52,8 +52,8 @@ interface DataContextType {
   addProjectCategory: (projectId: number, label: string) => Promise<void>;
   deleteProjectCategory: (projectId: number, categoryId: string) => Promise<void>;
   deleteProject: (id: number) => Promise<void>;
-  updateProject: (id: number, data: Partial<Pick<Project, 'name' | 'description' | 'stages'>>) => Promise<void>;
-  addProject: (p: Omit<Project, 'id' | 'score_categories'>) => Promise<number | undefined>;
+  updateProject: (id: number, data: Partial<Project>) => Promise<void>;
+  addProject: (p: Omit<Project, 'id'>) => Promise<number | undefined>;
   
   // Stages (Badges) CRUD
   addStage: (stage: string) => void;
@@ -137,6 +137,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       if (studentsData) {
         const mappedStudents = studentsData.map((s: any) => ({
           ...s,
+          cohort: s.cohorts, // Map plural DB name to singular App property
           project_scores: s.grades || []
         }));
         setStudents(mappedStudents);
@@ -212,7 +213,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     } else {
       const newStudent = { 
         ...data, 
-        cohort: data.cohorts, // Map cohorts (plural) to cohort (singular) for UI filtering
+        cohort: data.cohorts,
         project_scores: data.grades || [] 
       };
       setStudents(prev => [newStudent, ...prev]);
@@ -358,7 +359,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       average_score
     };
 
-    const { data, error } = await supabase.from('grades').upsert(upsertData).select().single();
+    const { data, error } = await supabase.from('grades').upsert(upsertData, { onConflict: 'student_id, project_id' }).select().single();
     if (error) {
        toast.error('성적 저장 실패');
     } else if (data) {
@@ -456,41 +457,33 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateProject = async (id: number, data: Partial<Pick<Project, 'name' | 'description' | 'stages'>>) => {
+  const updateProject = async (id: number, data: Partial<Project>) => {
     const { error } = await supabase.from('projects').update(data).eq('id', id);
-    if (!error) setProjects(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+    if (error) {
+      toast.error('프로젝트 수정 실패');
+    } else {
+      setProjects(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+    }
   };
 
-  const addProject = async (p: Omit<Project, 'id' | 'score_categories'>) => {
-    const insertData = {
-      ...p,
-      stages: p.stages || ['기획', '디자인', '개발', '검증', '완료'],
-      score_categories: [
-        { id: 'planning', label: '기획' },
-        { id: 'development', label: '개발' },
-        { id: 'design', label: '디자인' },
-        { id: 'communication', label: '소통' }
-      ]
-    };
-
-    if (!insertData.cohort_id || insertData.cohort_id === 0) {
-      console.error('Insert project rejected: cohort_id is 0 or missing');
+  const addProject = async (p: Omit<Project, 'id'>) => {
+    if (!p.cohort_id || p.cohort_id === 0) {
       toast.error('유효한 기수를 선택해주세요.');
       return undefined;
     }
 
     const { data, error } = await supabase
       .from('projects')
-      .insert([insertData])
+      .insert([p])
       .select('*, cohort:cohorts(name)') // Alias cohorts to cohort for UI
       .single();
 
     if (error) {
       console.error('Insert project error:', error.message, error.details);
-      toast.error(`프로젝트 생성 실패: ${error.message} (${error.hint || '데이터 확인'})`);
+      toast.error(`프로젝트 생성 실패: ${error.message}`);
       return undefined;
     } else if (!data) {
-      toast.error('프로젝트가 생성되었으나 데이터를 받지 못했습니다. (RLS 확인 필요)');
+      toast.error('프로젝트 데이터 수신 실패');
       return undefined;
     } else {
       setProjects(prev => [data, ...prev]);

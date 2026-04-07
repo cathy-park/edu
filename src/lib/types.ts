@@ -60,6 +60,7 @@ export interface StudentTag {
 export interface Consultation {
   id: number;
   student_id: number;
+  project_id?: number;
   consulted_at: string;
   type: ConsultationType;
   content: string;

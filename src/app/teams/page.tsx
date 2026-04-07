@@ -174,21 +174,29 @@ function ProjectManagementContent() {
     if (!projectForm.name.trim()) return toast.error('프로젝트 이름을 입력하세요');
     if (projectForm.stages.length === 0) return toast.error('최소 한 개의 진행 단계가 필요합니다');
     
+    // Sync score categories with stages as requested
+    const syncedCategories = projectForm.stages.map(s => ({
+      id: s.toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, ''),
+      label: s
+    }));
+
     if (editingProject) {
       updateProject(editingProject, { 
         name: projectForm.name, 
         description: projectForm.description,
-        stages: projectForm.stages 
+        stages: projectForm.stages,
+        score_categories: syncedCategories
       });
-      toast.success('프로젝트가 수정되었습니다');
+      toast.success('프로젝트가 수정되었습니다 (평가 항목 동기화됨)');
     } else {
       addProject({ 
         name: projectForm.name, 
         description: projectForm.description, 
         cohort_id: projectForm.cohort_id,
-        stages: projectForm.stages
+        stages: projectForm.stages,
+        score_categories: syncedCategories
       });
-      toast.success('새 프로젝트가 추가되었습니다');
+      toast.success('새 프로젝트가 추가되었습니다 (평가 항목 동기화됨)');
     }
     setShowProjectModal(false);
     setEditingProject(null);
@@ -336,7 +344,24 @@ function ProjectManagementContent() {
                       className={`badge ${projectObj ? getStageColorClass(team.stage, projectObj.stages) : ''}`} 
                       value={team.stage} 
                       onClick={e => e.stopPropagation()}
-                      onChange={e => { e.stopPropagation(); updateTeam(team.id, { stage: e.target.value }); }}
+                      onChange={e => { 
+                        e.stopPropagation(); 
+                        const newStage = e.target.value;
+                        const projectObj = projects.find(p => p.id === team.project_id);
+                        let progress_pct = team.progress_pct;
+
+                        if (projectObj && projectObj.stages.length > 0) {
+                          const stageIndex = projectObj.stages.indexOf(newStage);
+                          if (stageIndex !== -1) {
+                            progress_pct = Math.round(((stageIndex + 1) / projectObj.stages.length) * 100);
+                          }
+                        }
+
+                        updateTeam(team.id, { 
+                          stage: newStage,
+                          progress_pct
+                        }); 
+                      }}
                       style={{ border: 'none', cursor: 'pointer', padding: '0 4px', height: 20, fontSize: 10, borderRadius: 4 }}
                     >
                       {projectObj?.stages.map(s => <option key={s} value={s}>{s}</option>) || globalStages.map(s => <option key={s} value={s}>{s}</option>)}

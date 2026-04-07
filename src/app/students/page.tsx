@@ -166,7 +166,7 @@ export default function StudentsPage() {
               <th>상태</th>
               <th>GPA</th>
               <th>출석률</th>
-              <th>역량 태그</th>
+              <th>관심 분야</th>
               <th>액션</th>
             </tr>
           </thead>
