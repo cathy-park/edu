@@ -149,7 +149,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         const mappedStudents = studentsData.map((s: any) => {
           const scores = s.grades || [];
           const totalAvg = scores.length > 0 
-            ? scores.reduce((acc: number, cur: any) => acc + (cur.team_score || cur.average_score || 0), 0) / scores.length 
+            ? scores.reduce((acc: number, cur: any) => {
+                const sVal = Number(cur.team_score || cur.average_score || 0);
+                return acc + sVal;
+              }, 0) / scores.length 
             : 0;
 
           return {
