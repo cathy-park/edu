@@ -6,7 +6,7 @@ import {
   addDays, addMonths, subMonths, isSameMonth, isToday, isSameDay,
 } from 'date-fns';
 import { ko } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Edit3, Calendar as CalIcon } from 'lucide-react';
 import { Schedule, Todo } from '@/lib/types';
 import ScheduleModal from './ScheduleModal';
 
@@ -18,14 +18,17 @@ interface Props {
   onDelete: (id: number) => void;
   selectedDate: Date;
   onSelectDate: (date: Date) => void;
+  // v8.28: Support project date updates from calendar
+  onUpdateProjectDate?: (id: number, start: string, end: string) => Promise<void>;
 }
 
 export default function DashboardCalendar({ 
-  schedules, todos, onAdd, onUpdate, onDelete, selectedDate, onSelectDate 
+  schedules, todos, onAdd, onUpdate, onDelete, selectedDate, onSelectDate, onUpdateProjectDate 
 }: Props) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
   const [hoveredDay, setHoveredDay] = useState<string | null>(null);
   const [modal, setModal] = useState<{ mode: 'add'; date: string } | { mode: 'edit'; schedule: Schedule } | null>(null);
+  const [editingProject, setEditingProject] = useState<{ id: number, start: string, end: string, title: string } | null>(null);
 
   const monthStart = startOfMonth(currentMonth);
   const monthEnd = endOfMonth(currentMonth);
@@ -48,10 +51,8 @@ export default function DashboardCalendar({
     }));
     
     const dayTodos = todos.filter((t) => t.due_date && t.due_date.split('T')[0] === targetStr);
-    
-    // Wrap todos as pseudo-schedules for UI display
     const todoEvents = dayTodos.map(t => ({
-      id: -t.id, // Marker for todo
+      id: -t.id,
       title: `[할일] ${t.title}`,
       start_date: t.due_date!,
       category: 'todo' as any,
@@ -59,30 +60,12 @@ export default function DashboardCalendar({
       is_start: true
     }));
     
-    return [...daySchedules, ...todoEvents] as (Schedule & { is_start: boolean })[];
+    return [...daySchedules, ...todoEvents] as (Schedule & { is_start: boolean, is_project?: boolean, originalProjectId?: number })[];
   };
-
-  const ddayItems = schedules
-    .filter((s) => s.is_dday)
-    .map((s) => {
-      const diff = Math.ceil((new Date(s.start_date).getTime() - new Date().setHours(0, 0, 0, 0)) / 86400000);
-      return { ...s, diff };
-    })
-    .filter((s) => s.diff >= 0)
-    .sort((a, b) => a.diff - b.diff)
-    .slice(0, 4);
 
   const handleSave = (data: Omit<Schedule, 'id' | 'created_at'>) => {
-    if (modal?.mode === 'edit') {
-      onUpdate(modal.schedule.id, data);
-    } else {
-      onAdd(data);
-    }
-    setModal(null);
-  };
-
-  const handleDelete = (id: number) => {
-    onDelete(id);
+    if (modal?.mode === 'edit') { onUpdate(modal.schedule.id, data); } 
+    else { onAdd(data); }
     setModal(null);
   };
 
@@ -90,29 +73,11 @@ export default function DashboardCalendar({
 
   return (
     <div>
-      {/* D-Day Strip */}
-      {ddayItems.length > 0 && (
-        <div className="dday-strip">
-          {ddayItems.map((item) => (
-            <div key={item.id} className="dday-item" style={{ cursor: 'pointer' }}
-              onClick={() => setModal({ mode: 'edit', schedule: item })}>
-              <span className="dday-label">{item.diff === 0 ? 'D-Day' : `D-${item.diff}`}</span>
-              <span className="dday-title">{item.title}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Calendar */}
       <div className="card">
         <div className="cal-header">
-          <button className="cal-nav" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}>
-            <ChevronLeft size={16} />
-          </button>
+          <button className="cal-nav" onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}><ChevronLeft size={16} /></button>
           <span className="cal-title">{format(currentMonth, 'yyyy년 M월', { locale: ko })}</span>
-          <button className="cal-nav" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}>
-            <ChevronRight size={16} />
-          </button>
+          <button className="cal-nav" onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}><ChevronRight size={16} /></button>
         </div>
 
         <div className="cal-grid">
@@ -140,101 +105,84 @@ export default function DashboardCalendar({
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 3 }}>
                   <div className="cal-num">{format(day, 'd')}</div>
                   {(isHovered || isSelected) && (
-                    <button
-                      onClick={(e) => { e.stopPropagation(); setModal({ mode: 'add', date: dateStr }); }}
-                      style={{
-                        width: 16, height: 16, borderRadius: 4,
-                        background: 'var(--accent)', border: 'none', cursor: 'pointer',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        flexShrink: 0,
-                        zIndex: 2
-                      }}
-                      title="일정 추가"
-                    >
+                    <button onClick={(e) => { e.stopPropagation(); setModal({ mode: 'add', date: dateStr }); }} style={{ width: 16, height: 16, borderRadius: 4, background: 'var(--accent)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                       <Plus size={10} color="white" />
                     </button>
                   )}
                 </div>
                 {events.slice(0, 3).map((ev) => {
                   const isTodo = ev.id < 0;
-                  const isStart = (ev as any).is_start;
+                  const isStart = ev.is_start;
+                  const isProject = ev.is_project;
                   
-                  return ev.is_dday ? (
-                    <div key={ev.id} className={`dday-chip ${!isStart ? 'duration-bar' : ''}`} title={ev.title}
-                      onClick={(e) => { 
-                        if (isTodo) return;
-                        e.stopPropagation(); 
-                        setModal({ mode: 'edit', schedule: ev as Schedule }); 
-                      }}
-                      style={{ 
-                        cursor: isTodo ? 'default' : 'pointer', 
-                        height: isStart ? 'auto' : 6,
-                        background: ev.color || undefined
-                      }}>
-                      {isStart && ev.title}
-                    </div>
-                  ) : (
+                  return (
                     <div key={ev.id} className={`cal-event ev-${ev.category} ${!isStart ? 'duration-bar' : ''}`} title={ev.title}
                       onClick={(e) => { 
                         if (isTodo) return;
                         e.stopPropagation(); 
-                        setModal({ mode: 'edit', schedule: ev as Schedule }); 
+                        if (isProject && ev.originalProjectId) {
+                          setEditingProject({ id: ev.originalProjectId, start: ev.start_date, end: ev.end_date || ev.start_date, title: ev.title });
+                        } else {
+                          setModal({ mode: 'edit', schedule: ev as Schedule }); 
+                        }
                       }}
                       style={{ 
-                        cursor: isTodo ? 'default' : 'pointer', 
-                        height: isStart ? 'auto' : 6, 
-                        margin: isStart ? '3px 0' : '1px 0',
                         backgroundColor: ev.color ? `${ev.color}33` : undefined,
                         borderLeftColor: ev.color || undefined,
-                        color: ev.color || undefined
+                        color: ev.color || undefined,
+                        position: 'relative'
                       }}>
-                      {isStart ? ev.title : ''}
+                      {isStart && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+                           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.title}</span>
+                           {isProject && <Edit3 size={10} style={{ opacity: 0.6 }} />}
+                        </div>
+                      )}
                     </div>
                   );
                 })}
-                {events.length > 3 && (
-                  <div style={{ fontSize: 10, color: 'var(--text-muted)', paddingLeft: 2 }}>
-                    +{events.length - 3}
-                  </div>
-                )}
               </div>
             );
           })}
         </div>
       </div>
 
-      <style jsx global>{`
-        .cal-cell.selected {
-          border: 1.5px solid var(--accent);
-          background: var(--accent-light);
-        }
-        .cal-event.duration-bar {
-          padding: 0;
-          opacity: 0.6;
-          border-left: none;
-          min-height: 6px;
-        }
-        .dday-chip.duration-bar {
-          padding: 0;
-          opacity: 0.4;
-          min-height: 6px;
-        }
-        .cal-event.ev-todo {
-          background: rgba(124, 58, 237, 0.1);
-          color: var(--accent);
-          border-left: 3px solid var(--accent);
-          font-weight: 600;
-        }
-      `}</style>
+      {editingProject && (
+        <div className="modal-overlay" onClick={() => setEditingProject(null)}>
+           <div className="modal card" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+              <div className="modal-header">
+                 <h3 className="modal-title">일정 수정 - {editingProject.title}</h3>
+              </div>
+              <div className="modal-body" style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                 <div className="form-field">
+                    <label className="form-label">시작일</label>
+                    <input type="date" className="form-input" value={editingProject.start} onChange={e => setEditingProject(p => p ? {...p, start: e.target.value} : null)} />
+                 </div>
+                 <div className="form-field">
+                    <label className="form-label">종료일</label>
+                    <input type="date" className="form-input" value={editingProject.end} onChange={e => setEditingProject(p => p ? {...p, end: e.target.value} : null)} />
+                 </div>
+              </div>
+              <div className="modal-footer" style={{ display: 'flex', gap: 12, marginTop: 16 }}>
+                 <button className="btn btn-secondary" style={{ flex: 1 }} onClick={() => setEditingProject(null)}>취소</button>
+                 <button className="btn btn-primary" style={{ flex: 1 }} onClick={async () => {
+                    if (onUpdateProjectDate) {
+                       await onUpdateProjectDate(editingProject.id, editingProject.start, editingProject.end);
+                       setEditingProject(null);
+                    }
+                 }}>일정 업데이트</button>
+              </div>
+           </div>
+        </div>
+      )}
 
-      {/* Modal */}
       {modal && (
         <ScheduleModal
           schedule={modal.mode === 'edit' ? modal.schedule : null}
           defaultDate={modal.mode === 'add' ? modal.date : undefined}
           onClose={() => setModal(null)}
           onSave={handleSave}
-          onDelete={handleDelete}
+          onDelete={id => { onDelete(id); setModal(null); }}
         />
       )}
     </div>

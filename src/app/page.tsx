@@ -19,18 +19,16 @@ export default function DashboardPage() {
   const { 
     students, consultations, schedules, todos, projects,
     addSchedule, updateSchedule, deleteSchedule,
-    addTodo, toggleTodo, deleteTodo 
+    addTodo, toggleTodo, deleteTodo, updateProject
   } = useData();
   
   const [selectedDate, setSelectedDate] = useState(new Date());
-
   const [showAddCohort, setShowAddCohort] = useState(false);
   const [newCohortName, setNewCohortName] = useState('');
-  
   const [showEditCohort, setShowEditCohort] = useState(false);
   const [editCohortName, setEditCohortName] = useState('');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
-
+  
   // Instructor name state
   const [instructorName, setInstructorName] = useState('김강사');
   const [isEditingName, setIsEditingName] = useState(false);
@@ -38,10 +36,7 @@ export default function DashboardPage() {
 
   useEffect(() => {
     const saved = localStorage.getItem('instructorName');
-    if (saved) {
-      setInstructorName(saved);
-      setTempName(saved);
-    }
+    if (saved) { setInstructorName(saved); setTempName(saved); }
   }, []);
 
   const saveName = () => {
@@ -52,31 +47,50 @@ export default function DashboardPage() {
     toast.success('이름이 변경되었습니다');
   };
 
-  // Fix 3: D-Day Calculation Unit (v8.27)
+  // Fix 2: Multi D-Day Logic (v8.28)
   const ddayWidget = useMemo(() => {
     const today = new Date();
     today.setHours(0,0,0,0);
     
-    // Find nearest project end date
     const activeProjects = projects
       .filter(p => p.end_date && new Date(p.end_date) >= today)
       .sort((a, b) => new Date(a.end_date!).getTime() - new Date(b.end_date!).getTime());
       
     if (activeProjects.length === 0) return null;
     
-    const target = activeProjects[0];
-    const diff = differenceInDays(new Date(target.end_date!), today);
-    
     return (
-      <div className="dday-hero" style={{ background: 'var(--accent)', color: 'white', padding: '16px 24px', borderRadius: 20, display: 'flex', alignItems: 'center', gap: 16, marginBottom: 24, boxShadow: '0 8px 30px rgba(124, 58, 237, 0.3)' }}>
-        <div style={{ background: 'rgba(255,255,255,0.2)', width: 44, height: 44, borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Clock size={24} />
-        </div>
-        <div style={{ flex: 1 }}>
-          <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.8 }}>현재 진행중인 핵심 프로젝트 마감까지</div>
-          <div style={{ fontSize: 18, fontWeight: 950 }}>{target.name}</div>
-        </div>
-        <div style={{ fontSize: 32, fontWeight: 950 }}>D-{diff === 0 ? 'Day' : diff}</div>
+      <div className="dday-hero-container" style={{ display: 'flex', gap: 16, overflowX: 'auto', paddingBottom: 12, marginBottom: 24, cursor: 'grab' }}>
+        {activeProjects.map((p, idx) => {
+           const diff = differenceInDays(new Date(p.end_date!), today);
+           const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899'];
+           const pColor = colors[idx % colors.length];
+           
+           return (
+              <div key={`dday-card-${p.id}`} 
+                className="dday-card" 
+                style={{ 
+                  flexShrink: 0, 
+                  background: pColor, 
+                  color: 'white', 
+                  padding: '16px 20px', 
+                  borderRadius: 20, 
+                  minWidth: 260, 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  gap: 12, 
+                  boxShadow: '0 6px 20px rgba(0,0,0,0.1)' 
+                }}>
+                <div style={{ background: 'rgba(255,255,255,0.2)', width: 36, height: 36, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <Clock size={20} />
+                </div>
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, opacity: 0.8, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>마감 D-{diff === 0 ? 'Day' : diff}</div>
+                  <div style={{ fontSize: 15, fontWeight: 950, textOverflow: 'ellipsis', overflow: 'hidden', whiteSpace: 'nowrap' }}>{p.name}</div>
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 950 }}>D-{diff}</div>
+              </div>
+           );
+        })}
       </div>
     );
   }, [projects]);
@@ -103,15 +117,13 @@ export default function DashboardPage() {
     }).length;
   }, [selectedCohort, consultations, students]);
 
-  // Fix 2: Dynamic Project Colors for Calendar (v8.27)
   const calendarSchedules = useMemo(() => {
     const projectSchedules = projects.map(p => {
-      // Fix 2: Assign distinct color based on ID
       const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#ef4444'];
       const pColor = colors[p.id % colors.length];
-      
       return {
         id: 10000 + p.id,
+        originalProjectId: p.id,
         title: `[팀별] ${p.name}`,
         start_date: p.start_date || '',
         end_date: p.end_date || p.start_date || '',
@@ -121,9 +133,17 @@ export default function DashboardPage() {
         is_project: true
       };
     });
-    
-    return [...schedules, ...projectSchedules] as Schedule[];
+    return [...schedules, ...projectSchedules] as any[];
   }, [schedules, projects]);
+
+  const handleUpdateProjectDate = async (id: number, start: string, end: string) => {
+    if (new Date(end) < new Date(start)) {
+      toast.error('종료일은 시작일 이후여야 합니다.');
+      return;
+    }
+    await updateProject(id, { start_date: start, end_date: end });
+    toast.success('프로젝트 일정이 변경되었습니다.');
+  };
 
   const today = new Date();
   const greeting = today.getHours() < 12 ? '좋은 아침이에요' : today.getHours() < 18 ? '좋은 오후예요' : '좋은 저녁이에요';
@@ -135,10 +155,8 @@ export default function DashboardPage() {
     <div className="page-wrapper">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div style={{ flex: 1 }}>
-           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 26, fontWeight: 900 }}>
-             {greeting}, {instructorName}님 👋
-           </div>
-           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — 오늘의 현황입니다.</div>
+           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 26, fontWeight: 900 }}>{greeting}, {instructorName}님 👋</div>
+           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — 오늘의 현황입니다. <small style={{opacity:0.3}}>v8.28</small></div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
            <select className="form-select" style={{ width: 130, height: 40 }} value={selectedCohort} onChange={e => setSelectedCohort(e.target.value)}>
@@ -149,7 +167,6 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Fix 3: D-Day Widget Display */}
       {ddayWidget}
 
       <div className="stat-cards-grid">
@@ -176,6 +193,7 @@ export default function DashboardPage() {
           onDelete={deleteSchedule}
           selectedDate={selectedDate}
           onSelectDate={setSelectedDate}
+          onUpdateProjectDate={handleUpdateProjectDate}
         />
         <div style={{ flex: 1 }}>
           <TodoList selectedDate={selectedDate} />
