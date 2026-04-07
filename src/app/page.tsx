@@ -23,6 +23,8 @@ export default function DashboardPage() {
   } = useData();
   
   const [selectedDate, setSelectedDate] = useState(new Date());
+  
+  // Cohort UI states
   const [showAddCohort, setShowAddCohort] = useState(false);
   const [newCohortName, setNewCohortName] = useState('');
   const [showEditCohort, setShowEditCohort] = useState(false);
@@ -97,7 +99,7 @@ export default function DashboardPage() {
   const calendarSchedules = useMemo(() => {
     const projectSchedules = projects.map(p => {
       const colors = ['#8b5cf6', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#ef4444'];
-      const pColor = colors[p.id % colors.length];
+      const pColor = colors[Number(p.id) % colors.length];
       return { id: 10000 + p.id, originalProjectId: p.id, title: `[팀별] ${p.name}`, start_date: p.start_date || '', end_date: p.end_date || p.start_date || '', category: '팀활동' as any, is_dday: false, color: pColor, is_project: true };
     });
     return [...schedules, ...projectSchedules] as any[];
@@ -114,25 +116,47 @@ export default function DashboardPage() {
     toast.success('일정이 이동되었습니다');
   };
 
-  const today = new Date();
-  const greeting = today.getHours() < 12 ? '좋은 아침이에요' : today.getHours() < 18 ? '좋은 오후예요' : '좋은 저녁이에요';
-
   const handleAddCohort = async () => { if (!newCohortName.trim()) return; await addCohort(newCohortName); setNewCohortName(''); setShowAddCohort(false); };
   const handleEditCohort = async () => { await updateCohort(selectedCohort, editCohortName); setShowEditCohort(false); setIsConfirmingDelete(false); };
+
+  const today = new Date();
+  const greeting = today.getHours() < 12 ? '좋은 아침이에요' : today.getHours() < 18 ? '좋은 오후예요' : '좋은 저녁이에요';
 
   return (
     <div className="page-wrapper">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
         <div style={{ flex: 1 }}>
            <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 26, fontWeight: 900 }}>{greeting}, {instructorName}님 👋</div>
-           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>v8.30 Drag&Drop</span></div>
+           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>v8.31 All Fix</span></div>
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-           <select className="form-select" style={{ width: 130, height: 40 }} value={selectedCohort} onChange={e => setSelectedCohort(e.target.value)}>
-             <option value="전체">전체 기수</option>
-             {cohorts.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
-           </select>
-           <button className="btn btn-secondary" style={{ width: 40, height: 40, padding: 0 }} onClick={() => setShowAddCohort(true)}><Plus size={18} /></button>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+           {showAddCohort ? (
+              <div style={{ display: 'flex', gap: 6 }}>
+                 <input className="form-input" style={{ width: 140, height: 40 }} placeholder="기수명..." value={newCohortName} onChange={e => setNewCohortName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleAddCohort()} />
+                 <button className="btn btn-primary" style={{ width: 40, height: 40, padding:0 }} onClick={handleAddCohort}><Check size={18} /></button>
+                 <button className="btn btn-secondary" style={{ width: 40, height: 40, padding:0 }} onClick={() => setShowAddCohort(false)}><X size={18} /></button>
+              </div>
+           ) : showEditCohort ? (
+              <div style={{ display: 'flex', gap: 6 }}>
+                 <input className="form-input" style={{ width: 140, height: 40 }} value={editCohortName} onChange={e => setEditCohortName(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleEditCohort()} />
+                 <button className="btn btn-primary" style={{ width: 40, height: 40, padding:0 }} onClick={handleEditCohort}><Check size={18} /></button>
+                 {isConfirmingDelete ? (
+                    <button className="btn btn-primary" style={{ height: 40, background: 'var(--red)' }} onClick={() => { deleteCohort(selectedCohort, true); setShowEditCohort(false); setIsConfirmingDelete(false); }}>확인</button>
+                 ) : (
+                    <button className="btn btn-secondary" style={{ width: 40, height: 40, padding:0, color: 'var(--red)' }} onClick={() => setIsConfirmingDelete(true)}><Trash2 size={18} /></button>
+                 )}
+                 <button className="btn btn-secondary" style={{ width: 40, height: 40, padding:0 }} onClick={() => setShowEditCohort(false)}><X size={18} /></button>
+              </div>
+           ) : (
+              <>
+                <select className="form-select" style={{ width: 130, height: 40 }} value={selectedCohort} onChange={e => setSelectedCohort(e.target.value)}>
+                  <option value="전체">전체 기수</option>
+                  {cohorts.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}
+                </select>
+                <button className="btn btn-secondary" style={{ width: 40, height: 40, padding: 0 }} onClick={() => { setEditCohortName(selectedCohort); setShowEditCohort(true); }} disabled={selectedCohort === '전체'}><Pencil size={18} /></button>
+                <button className="btn btn-primary" style={{ width: 40, height: 40, padding: 0 }} onClick={() => setShowAddCohort(true)}><Plus size={18} /></button>
+              </>
+           )}
         </div>
       </div>
 
@@ -146,10 +170,6 @@ export default function DashboardPage() {
         <div className="stat-card" onClick={() => router.push('/consultations?period=this_week')} style={{ cursor: 'pointer' }}>
           <div className="stat-card-content"><div className="stat-card-label">이번주 상담</div><div className="stat-card-value">{consultationsThisWeek}건</div></div>
           <div className="stat-card-icon" style={{ background: 'rgba(16,185,129,0.1)' }}><MessageSquare size={20} color="#10b981" /></div>
-        </div>
-        <div className="stat-card" onClick={() => router.push('/projects')} style={{ cursor: 'pointer' }}>
-          <div className="stat-card-content"><div className="stat-card-label">진행 프로젝트</div><div className="stat-card-value">{projects.length}개</div></div>
-          <div className="stat-card-icon" style={{ background: 'rgba(59,130,246,0.1)' }}><CalIcon size={20} color="#3b82f6" /></div>
         </div>
       </div>
 
