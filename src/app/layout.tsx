@@ -18,8 +18,8 @@ export const metadata: Metadata = {
   themeColor: "#7c3aed",
   viewport: "width=device-width, initial-scale=1, maximum-scale=1",
   icons: {
-    icon: "/logo.png?v=3",
-    apple: "/logo.png?v=3",
+    icon: "/icon.png?v=1",
+    apple: "/icon.png?v=1",
   }
 };
 

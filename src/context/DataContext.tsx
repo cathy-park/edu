@@ -37,6 +37,7 @@ interface DataContextType {
   
   // Member CRUD
   addTeamMember: (teamId: number, studentId: number, role?: string) => Promise<void>;
+  updateTeamMemberRole: (memberId: number, role: string) => Promise<void>;
   removeTeamMember: (memberId: number) => Promise<void>;
 
   // Project Score
@@ -354,6 +355,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const updateTeamMemberRole = async (id: number, role: string) => {
+    const { error } = await supabase.from('team_members').update({ role }).eq('id', id);
+    if (error) {
+      console.error('Update member role error:', error);
+      toast.error('역할 수정 실패');
+    } else {
+      setTeamMembers(prev => prev.map(m => m.id === id ? { ...m, role } : m));
+    }
+  };
+
   const updateProjectScore = async (studentId: number, projectId: number, categoryScores: Record<string, number>, teamScore: number) => {
     const catsCount = Object.keys(categoryScores).length;
     const average_score = catsCount > 0 ? Object.values(categoryScores).reduce((a, b) => a + b, 0) / catsCount : 0;
@@ -388,7 +399,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addConsultation = async (c: Omit<Consultation, 'id' | 'created_at'>) => {
     const { data, error } = await supabase.from('consultations').insert([c]).select().single();
     if (error) {
-      toast.error('상담 저장 실패');
+      console.error('Consultation save error:', error.message, error.details, error.hint);
+      toast.error(`상담 저장 실패: ${error.message}`);
     } else if (data) {
       setConsultations(prev => [data, ...prev]);
       toast.success('상담이 저장되었습니다');
@@ -649,7 +661,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     <DataContext.Provider value={{ 
       students, projects, teams, consultations, tags, teamMembers, workTasks, todos, schedules, stages, isLoading,
       addStudent, updateStudent, deleteStudent, updateStudentTags,
-      addTeam, updateTeam, deleteTeam, addTeamMember, removeTeamMember,
+      addTeam, updateTeam, deleteTeam, addTeamMember, updateTeamMemberRole, removeTeamMember,
       updateProjectScore, addConsultation, updateConsultation, deleteConsultation, 
       updateTeamProgress, updateTeamScore,
       addProjectCategory, deleteProjectCategory, deleteProject, updateProject, addProject,

@@ -5,7 +5,7 @@ import {
   X, Users, BookOpen, Clock, ChevronRight, 
   Save, Trash2, UserPlus, Star, Search, 
   Check, Plus, Link as LinkIcon, MessageSquare, 
-  Edit3, Calendar, Minus, StickyNote
+  Edit3, Calendar, Minus, StickyNote, Crown
 } from 'lucide-react';
 import { Team, Student, Project, TeamMember, Consultation, ConsultationType } from '@/lib/types';
 import { StarRating } from '@/components/common/StarRating';
@@ -26,7 +26,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     students, projects, updateProjectScore, 
     teamMembers, addTeamMember, removeTeamMember,
     updateTeam, consultations, addConsultation, updateConsultation, deleteConsultation,
-    deleteProjectCategory
+    deleteProjectCategory, updateTeamMemberRole
   } = useData();
   
   const project = projects.find(p => p.id === team.project_id);
@@ -206,8 +206,25 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                       <div key={m.id} className="m-row" onClick={() => onMemberClick(m.student_id)}>
                         <div className="m-avatar">{s.name[0]}</div>
                         <div className="m-info">
-                          <span className="m-name">{s.name}</span>
-                          <span className="m-role">{m.role || '팀원'}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span className="m-name">{s.name}</span>
+                            {team.leader_id === m.student_id && <Crown size={14} style={{ color: 'var(--yellow)', fill: 'var(--yellow)', opacity: 0.9 }} />}
+                          </div>
+                          <input 
+                            className="m-role-input" 
+                            defaultValue={m.role || ''} 
+                            placeholder="역할 입력 (예: 기획, 개발)"
+                            onClick={(e) => e.stopPropagation()}
+                            onBlur={(e) => {
+                              if (e.target.value !== m.role) {
+                                updateTeamMemberRole(m.id, e.target.value);
+                                toast.success(`${s.name} 역할이 수정되었습니다`);
+                              }
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                            }}
+                          />
                         </div>
                         <button className="m-del" onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(confirm('팀원을 제외하시겠습니까?')) removeTeamMember(m.id); }}><X size={14} /></button>
                       </div>
@@ -220,24 +237,24 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
           {activeTab === 'eval' && (
             <div className="tab-stack">
-              <div className="score-summary-card">
-                 <div className="total-title">팀 종합 점수 (자동 계산)</div>
-                 <div className="total-hero">
+              <div className="score-summary-card" style={{ background: 'var(--accent)', color: 'white' }}>
+                 <div className="total-title" style={{ opacity: 0.9, fontSize: '12px', fontWeight: 800 }}>팀 종합 점수 (항목별 평균 자동산출)</div>
+                 <div className="total-hero" style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8 }}>
                     <StarRating value={overallScore} readonly size={36} />
-                    <span className="total-num">{overallScore.toFixed(1)}</span>
+                    <span className="total-num" style={{ fontSize: '42px', fontWeight: 900 }}>{overallScore.toFixed(1)}</span>
                  </div>
-                 <p className="total-hint">현재 프로젝트 단계에 따른 평균 점수입니다.</p>
+                 <p className="total-hint" style={{ marginTop: 12, fontSize: '12px', opacity: 0.8 }}>세부 항목 별점을 입력하면 총점이 자동으로 계산됩니다.</p>
               </div>
 
               <div className="cats-management">
-                 <h4 className="s-title">평가 세부 항목 (진행 단계 동기화)</h4>
+                 <h4 className="s-title">평가 세부 항목</h4>
                  <div className="cats-list-entry" style={{ marginTop: 12 }}>
                     {(project?.stages || []).map((stage, idx) => {
                       const catId = stage.toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '');
                       return (
-                        <div key={catId} className="cat-entry-row">
+                        <div key={catId} className="cat-entry-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
                           <div className="cat-meta">
-                            <span className="cat-label">{idx + 1}. {stage}</span>
+                            <span className="cat-label" style={{ fontSize: '14px', fontWeight: 700 }}>{idx + 1}. {stage}</span>
                           </div>
                           <StarRating 
                             value={categoryScores[catId] || 0} 
@@ -249,7 +266,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                     })}
                  </div>
 
-                 <button className="btn btn-primary btn-full" onClick={handleSaveScores} style={{ marginTop: 24, height: 48 }}>
+                 <button className="btn btn-primary btn-full" onClick={handleSaveScores} style={{ marginTop: 24, height: 48, width: '100%' }}>
                     <Save size={16} /> 평가 점수 최종 저장
                  </button>
               </div>
@@ -409,6 +426,8 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         .m-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--bg-surface); border: 1.5px solid var(--border); border-radius: 14px; cursor: pointer; position: relative; }
         .m-avatar { width: 32px; height: 32px; background: var(--accent-light); color: var(--accent); border-radius: 8px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 900; }
         .m-name { font-size: 13px; font-weight: 800; }
+        .m-role-input { border: none; background: transparent; font-size: 11px; color: var(--text-muted); font-weight: 600; width: 100%; outline: none; padding: 2px 0; border-bottom: 1px solid transparent; transition: border-bottom 0.2s; }
+        .m-role-input:focus { border-bottom-color: var(--accent); color: var(--text-primary); }
         .score-summary-card { padding: 24px; background: var(--accent); color: white; border-radius: 20px; }
         .total-hero { display: flex; alignItems: center; gap: 16px; margin-top: 12px; }
         .total-num { font-size: 42px; font-weight: 900; }
