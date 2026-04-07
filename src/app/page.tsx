@@ -29,6 +29,7 @@ export default function DashboardPage() {
   const [editCohortName, setEditCohortName] = useState('');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   
+  // v8.36: Restore Instructor Name Edit
   const [instructorName, setInstructorName] = useState('김강사');
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState('김강사');
@@ -37,6 +38,14 @@ export default function DashboardPage() {
     const saved = localStorage.getItem('instructorName');
     if (saved) { setInstructorName(saved); setTempName(saved); }
   }, []);
+
+  const saveInstructorName = () => {
+    if (!tempName.trim()) { toast.error('이름을 입력해주세요'); return; }
+    setInstructorName(tempName);
+    localStorage.setItem('instructorName', tempName);
+    setIsEditingName(false);
+    toast.success('이름이 변경되었습니다');
+  };
 
   const ddayWidget = useMemo(() => {
     const today = new Date();
@@ -116,8 +125,21 @@ export default function DashboardPage() {
     <div className="page-wrapper">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 32 }}>
         <div style={{ flex: 1 }}>
-           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 26, fontWeight: 900 }}>{greeting}, {instructorName}님 👋</div>
-           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>v8.35 Nav Fixed</span></div>
+           <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 26, fontWeight: 900 }}>
+             {isEditingName ? (
+               <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                 <input className="form-input" style={{ width: 140, height: 36, fontSize: 18 }} value={tempName} onChange={e => setTempName(e.target.value)} onKeyDown={e => e.key === 'Enter' && saveInstructorName()} />
+                 <button className="btn btn-primary" style={{ width: 36, height: 36, padding:0 }} onClick={saveInstructorName}><Check size={16} /></button>
+                 <button className="btn btn-secondary" style={{ width: 36, height: 36, padding:0 }} onClick={() => { setIsEditingName(false); setTempName(instructorName); }}><X size={16} /></button>
+               </div>
+             ) : (
+               <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                 {greeting}, {instructorName}님 👋
+                 <button className="btn-icon-hover" onClick={() => setIsEditingName(true)} style={{ marginLeft: 4, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.3 }}><Pencil size={14} /></button>
+               </div>
+             )}
+           </div>
+           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>v8.36 Identity Fix</span></div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
            {showAddCohort ? (
