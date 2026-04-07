@@ -280,7 +280,7 @@ export default function StudentDetailPanel({
                      .map(s => {
                      const project = projects.find(p => p.id === s.project_id);
                      const participants = getProjectTeamMembers(s.project_id);
-                     const displayName = project?.name || s.project_name || '제목 없는 프로젝트';
+                     const displayName = project?.name || '제목 없는 프로젝트';
                      
                      return (
                        <div key={s.id} className="p-project-card" onClick={() => window.location.href = `/teams?project=${s.project_id}&student=${student.id}`}>

@@ -11,18 +11,19 @@ export type TodoPriority = '높음' | '보통' | '낮음';
 export interface Cohort {
   id: number;
   name: string;
-  start_date: string;
+  start_date?: string;
   end_date?: string;
-  student_count: number;
+  student_count?: number;
+  description?: string;
+  created_at?: string;
 }
 
 export interface ProjectScore {
   id: number;
   student_id: number;
   project_id: number;
-  project_name?: string;
-  category_scores: Record<string, number>; // e.g., { "planning": 4.5, "dev": 3.5 }
-  team_score: number; // Overall project grade (Star rating)
+  category_scores: Record<string, number>;
+  team_score: number;
   average_score: number;
   feedback?: string;
   created_at: string;
@@ -30,23 +31,21 @@ export interface ProjectScore {
 
 export interface Student {
   id: number;
+  name: string;
+  age?: number;
+  phone?: string;
+  email?: string;
   cohort_id: number;
   cohort?: Cohort;
-  name: string;
-  age: number;
-  phone: string;
-  email: string;
   status: StudentStatus;
+  profile_image_url?: string;
   joined_at: string;
-  project_scores: ProjectScore[]; // Multiple scores per project
+  gpa: number;
   attendance_rate: number;
-  gpa: number; // Aggregate average of scores
-  created_at: string;
   note?: string;
-  planning_score?: number;
-  dev_score?: number;
-  design_score?: number;
-  comm_score?: number;
+  project_scores: ProjectScore[];
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface StudentTag {
@@ -71,25 +70,25 @@ export interface Project {
   cohort_id: number;
   name: string;
   description?: string;
-  stage: ProjectStage;
   stages: string[];
-  score_categories: { id: string, label: string }[]; // Dynamic categories (Add/Delete possible)
+  score_categories: { id: string; label: string }[];
+  created_at?: string;
 }
 
 export interface Team {
   id: number;
-  project_id: number; // Linked to project instead of cohort
+  project_id: number;
   project?: Project;
   team_name: string;
-  stage: ProjectStage;
+  stage: string;
   progress_pct: number;
   leader_id?: number;
   leader?: Student;
   is_individual?: boolean;
-  created_at: string;
-  updated_at?: string;
-  project_link?: string;
   memo?: string;
+  project_link?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface TeamMember {
@@ -99,14 +98,6 @@ export interface TeamMember {
   student?: Student;
   role?: string;
   joined_at: string;
-}
-
-export interface WorkTask {
-  id: number;
-  title: string;
-  gpts_link?: string;
-  prompts: string[];
-  created_at: string;
 }
 
 export interface ProjectLog {
@@ -136,11 +127,24 @@ export interface Schedule {
 export interface Todo {
   id: number;
   title: string;
-  category: TodoCategory;
+  category: todo_category;
   related_student_id?: number;
   related_student?: Student;
   due_date?: string;
   is_done: boolean;
-  priority: TodoPriority;
+  priority: todo_priority;
+  created_at: string;
+}
+
+// Low-case versions used in database enums might differ, 
+// using those as types where necessary.
+export type todo_category = '개인업무' | '수강생관리' | '기타';
+export type todo_priority = '높음' | '보통' | '낮음';
+
+export interface WorkTask {
+  id: number;
+  title: string;
+  gpts_link?: string;
+  prompts: string[];
   created_at: string;
 }

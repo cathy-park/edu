@@ -69,13 +69,11 @@ function ProjectManagementContent() {
     description: string;
     cohort_id: number;
     stages: string[];
-    stage: string;
   }>({
     name: '',
     description: '',
     cohort_id: selectedCohort === '24기' ? 1 : selectedCohort === '25기' ? 2 : 1,
-    stages: ['기획', '디자인', '개발', '검증', '완료'],
-    stage: '기획'
+    stages: ['기획', '디자인', '개발', '검증', '완료']
   });
   
   const [editingProject, setEditingProject] = useState<number | null>(null);
@@ -123,8 +121,7 @@ function ProjectManagementContent() {
         name: p.name,
         description: p.description || '',
         cohort_id: p.cohort_id,
-        stages: p.stages,
-        stage: p.stage
+        stages: p.stages
       });
     } else {
       setEditingProject(null);
@@ -132,8 +129,7 @@ function ProjectManagementContent() {
         name: '',
         description: '',
         cohort_id: selectedCohort === '24기' ? 1 : selectedCohort === '25기' ? 2 : 1,
-        stages: ['기획', '디자인', '개발', '검증', '완료'],
-        stage: '기획'
+        stages: ['기획', '디자인', '개발', '검증', '완료']
       });
     }
     setShowProjectModal(true);
@@ -175,8 +171,7 @@ function ProjectManagementContent() {
         name: projectForm.name, 
         description: projectForm.description, 
         cohort_id: projectForm.cohort_id,
-        stages: projectForm.stages,
-        stage: projectForm.stages[0]
+        stages: projectForm.stages
       });
       toast.success('새 프로젝트가 추가되었습니다');
     }

@@ -1,7 +1,33 @@
 -- =============================================
--- 학생 관리 시스템 Supabase Schema
--- Supabase SQL Editor에 이 파일 전체를 붙여넣고 실행하세요
+-- 학생 관리 시스템 Supabase Schema (v2.0)
+-- 이 파일 전체를 Supabase SQL Editor에 붙여넣고 실행하세요.
+-- 기존 데이터가 있다면 삭제(Drop) 후 재생성됩니다.
 -- =============================================
+
+-- Drop existing tables to start fresh
+drop table if exists public.project_logs cascade;
+drop table if exists public.team_members cascade;
+drop table if exists public.teams cascade;
+drop table if exists public.projects cascade;
+drop table if exists public.attendances cascade;
+drop table if exists public.assignments cascade;
+drop table if exists public.grades cascade;
+drop table if exists public.consultations cascade;
+drop table if exists public.student_tags cascade;
+drop table if exists public.todos cascade;
+drop table if exists public.schedules cascade;
+drop table if exists public.students cascade;
+drop table if exists public.cohorts cascade;
+
+drop type if exists student_status cascade;
+drop type if exists consultation_type cascade;
+drop type if exists assignment_status cascade;
+drop type if exists attendance_status cascade;
+drop type if exists project_stage cascade;
+drop type if exists log_type cascade;
+drop type if exists schedule_category cascade;
+drop type if exists todo_category cascade;
+drop type if exists todo_priority cascade;
 
 -- Enable UUID extension
 create extension if not exists "pgcrypto";
@@ -9,32 +35,45 @@ create extension if not exists "pgcrypto";
 -- 1. cohorts (기수)
 create table public.cohorts (
   id serial primary key,
-  name varchar(50) not null,
-  start_date date not null,
+  name varchar(50) not null unique,
+  start_date date,
   end_date date,
   description text,
   created_at timestamptz default now()
 );
 
--- 2. students (수강생)
-create type student_status as enum ('수강중', '수료', '탈퇴');
+-- 2. projects (프로젝트)
+create table public.projects (
+  id serial primary key,
+  cohort_id int references public.cohorts(id) on delete cascade,
+  name varchar(100) not null,
+  description text,
+  stages text[] default '{"기획", "디자인", "개발", "검증", "완료"}',
+  score_categories jsonb default '[{"id": "planning", "label": "기획"}, {"id": "development", "label": "개발"}, {"id": "design", "label": "디자인"}, {"id": "communication", "label": "소통"}]',
+  created_at timestamptz default now()
+);
+
+-- 3. students (수강생)
+create type student_status as enum ('수강중', '수료', '중도포기', '탈퇴');
 
 create table public.students (
   id serial primary key,
   name varchar(50) not null,
   age smallint,
-  phone varchar(20) unique,
-  email varchar(100) unique,
+  phone varchar(20),
+  email varchar(100),
   cohort_id int references public.cohorts(id) on delete set null,
   status student_status not null default '수강중',
   profile_image_url text,
   joined_at date not null default current_date,
+  gpa decimal(3,2) default 0,
+  attendance_rate smallint default 0,
   note text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
 
--- 3. student_tags (역량 태그)
+-- 4. student_tags (역량 태그)
 create table public.student_tags (
   id serial primary key,
   student_id int not null references public.students(id) on delete cascade,
@@ -43,42 +82,30 @@ create table public.student_tags (
   unique(student_id, tag)
 );
 
--- 4. consultations (상담 이력)
+-- 5. consultations (상담 이력)
 create type consultation_type as enum ('개인상담', '진로상담', '학습점검', '기타');
 
 create table public.consultations (
   id serial primary key,
   student_id int not null references public.students(id) on delete cascade,
-  consulted_at date not null,
+  consulted_at timestamptz not null default now(),
   type consultation_type not null default '기타',
   content text not null,
   follow_up text,
   created_at timestamptz default now()
 );
 
--- 5. grades (성적/GPA)
+-- 6. grades (성적/Project Scores)
 create table public.grades (
   id serial primary key,
   student_id int not null references public.students(id) on delete cascade,
-  subject varchar(100) not null,
-  score decimal(5,2),
-  gpa decimal(3,2),
-  evaluated_at date not null,
-  note text
-);
-
--- 6. assignments (과제)
-create type assignment_status as enum ('제출', '미제출', '지각제출');
-
-create table public.assignments (
-  id serial primary key,
-  student_id int not null references public.students(id) on delete cascade,
-  assignment_name varchar(200) not null,
-  due_date date not null,
-  submitted_at timestamptz,
-  status assignment_status not null default '미제출',
-  score decimal(5,2),
-  feedback text
+  project_id int references public.projects(id) on delete cascade,
+  category_scores jsonb default '{}',
+  team_score decimal(3,2) default 0,
+  average_score decimal(3,2) default 0,
+  feedback text,
+  created_at timestamptz default now(),
+  unique(student_id, project_id)
 );
 
 -- 7. attendances (출석)
@@ -94,16 +121,15 @@ create table public.attendances (
 );
 
 -- 8. teams (팀)
-create type project_stage as enum ('기획', '디자인', '개발', '완료');
-
 create table public.teams (
   id serial primary key,
-  cohort_id int references public.cohorts(id) on delete set null,
+  project_id int references public.projects(id) on delete cascade,
   team_name varchar(100) not null,
-  project_topic varchar(200),
-  stage project_stage not null default '기획',
+  stage varchar(50) default '기획',
   progress_pct smallint default 0 check (progress_pct between 0 and 100),
   leader_id int references public.students(id) on delete set null,
+  memo text,
+  project_link text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()
 );
@@ -124,7 +150,7 @@ create type log_type as enum ('회의록', '멘토피드백', '진행보고');
 create table public.project_logs (
   id serial primary key,
   team_id int not null references public.teams(id) on delete cascade,
-  log_date date not null,
+  log_date date not null default current_date,
   type log_type not null,
   title varchar(200),
   content text not null,
@@ -143,19 +169,19 @@ create table public.schedules (
   end_date date,
   is_dday boolean default false,
   category schedule_category not null default '기타',
-  cohort_id int references public.cohorts(id) on delete set null,
+  cohort_id int references public.cohorts(id) on delete cascade,
   color varchar(7),
   created_at timestamptz default now()
 );
 
 -- 12. todos (투두리스트)
-create type todo_category as enum ('개인업무', '수강생관리');
+create type todo_category as enum ('개인업무', '수강생관리', '기타');
 create type todo_priority as enum ('높음', '보통', '낮음');
 
 create table public.todos (
   id serial primary key,
   title varchar(200) not null,
-  category todo_category not null default '개인업무',
+  category todo_category not null default '기타',
   related_student_id int references public.students(id) on delete set null,
   due_date date,
   is_done boolean default false,
@@ -164,22 +190,37 @@ create table public.todos (
 );
 
 -- =============================================
--- Row Level Security (선택 — 인증 붙일 경우 활성화)
+-- Row Level Security 비활성화 (개발 편의성)
 -- =============================================
--- alter table public.students enable row level security;
--- alter table public.teams enable row level security;
--- (필요 시 각 테이블에 RLS 정책 추가)
+alter table public.cohorts disable row level security;
+alter table public.projects disable row level security;
+alter table public.students disable row level security;
+alter table public.student_tags disable row level security;
+alter table public.consultations disable row level security;
+alter table public.grades disable row level security;
+alter table public.attendances disable row level security;
+alter table public.teams disable row level security;
+alter table public.team_members disable row level security;
+alter table public.project_logs disable row level security;
+alter table public.schedules disable row level security;
+alter table public.todos disable row level security;
 
 -- =============================================
--- 샘플 데이터
+-- 샘플 데이터 입력
 -- =============================================
-insert into public.cohorts (name, start_date, end_date) values
-  ('24기', '2024-03-04', '2024-08-30'),
-  ('25기', '2025-03-03', '2025-08-29');
 
-insert into public.students (name, age, phone, email, cohort_id, status, joined_at, gpa, attendance_rate) values
-  ('김민준', 24, '010-1234-5678', 'minjun@example.com', 2, '수강중', '2025-03-03', 3.8, 85),
-  ('이서연', 23, '010-9876-5432', 'seoyeon@example.com', 2, '수강중', '2025-03-03', 4.1, 92),
-  ('박지훈', 25, '010-5555-7777', 'jihoon@example.com', 1, '수료', '2024-03-04', 2.9, 78),
-  ('최예린', 22, '010-1111-2222', 'yerin@example.com', 2, '수강중', '2025-03-03', 3.9, 88),
-  ('강다은', 24, '010-8888-9999', 'daeun@example.com', 2, '수강중', '2025-03-03', 3.7, 82);
+-- 기수
+insert into public.cohorts (name, start_date) values
+  ('24기', '2024-03-04'),
+  ('25기', '2025-03-03');
+
+-- 프로젝트
+insert into public.projects (cohort_id, name, description) values
+  (1, '파이널 프로젝트', '24기 최종 프로젝트입니다.'),
+  (2, '팀 프로젝트 1', '25기 첫 번째 팀 프로젝트입니다.');
+
+-- 학생
+insert into public.students (name, cohort_id, status, joined_at, gpa, attendance_rate) values
+  ('김민준', 2, '수강중', '2025-03-03', 3.8, 85),
+  ('이서연', 2, '수강중', '2025-03-03', 4.1, 92),
+  ('박지훈', 1, '수료', '2024-03-04', 2.9, 78);

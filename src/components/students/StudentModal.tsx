@@ -17,20 +17,24 @@ interface Props {
 export default function StudentModal({ student, onClose, onSave }: Props) {
   const isEdit = Boolean(student);
   const { tags: allTags } = useData();
-  const { cohorts } = useCohort();
+  const { cohorts, selectedCohort } = useCohort();
   
-  const activeCohorts = cohorts
-    .filter(c => c !== '전체')
-    .map(name => mockCohorts.find(mc => mc.name === name) || { id: Date.now(), name });
+  // No need to map with mockCohorts anymore, use real cohorts from DB
+  const activeCohorts = cohorts;
 
   const initialTags = student ? allTags.filter(t => t.student_id === student.id).map(t => t.tag) : [];
   
+  // Find current cohort id for default selection
+  const defaultCohortId = student?.cohort_id?.toString() ?? 
+                         cohorts.find(c => c.name === selectedCohort)?.id?.toString() ?? 
+                         cohorts[0]?.id?.toString() ?? "";
+
   const [form, setForm] = useState({
     name: student?.name ?? '',
     age: student?.age?.toString() ?? '',
     phone: student?.phone ?? '',
     email: student?.email ?? '',
-    cohort_id: student?.cohort_id?.toString() ?? '2',
+    cohort_id: defaultCohortId,
     status: (student?.status ?? '수강중') as StudentStatus,
     note: student?.note ?? '',
   });
@@ -109,8 +113,8 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
             <div className="form-field">
               <label className="form-label">소속 기수</label>
               <select className="form-select" value={form.cohort_id} onChange={(e) => set('cohort_id', e.target.value)}>
-                {activeCohorts.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
+                {activeCohorts.filter(c => c && c.id).map((c, idx) => (
+                  <option key={`${c.id}-${idx}`} value={c.id}>{c.name}</option>
                 ))}
               </select>
             </div>

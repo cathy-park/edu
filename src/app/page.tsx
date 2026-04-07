@@ -96,15 +96,15 @@ export default function DashboardPage() {
     toast.success('일정이 삭제됐습니다');
   };
 
-  const handleAddCohort = () => {
+  const handleAddCohort = async () => {
     if (!newCohortName.trim()) return;
-    addCohort(newCohortName);
+    await addCohort(newCohortName);
     setNewCohortName('');
     setShowAddCohort(false);
   };
 
-  const handleEditCohort = () => {
-    updateCohort(selectedCohort, editCohortName);
+  const handleEditCohort = async () => {
+    await updateCohort(selectedCohort, editCohortName);
     setShowEditCohort(false);
     setIsConfirmingDelete(false);
   };
@@ -158,7 +158,8 @@ export default function DashboardPage() {
               value={selectedCohort}
               onChange={(e) => setSelectedCohort(e.target.value)}
             >
-              {cohorts.map((c) => <option key={c} value={c}>{c}</option>)}
+              <option value="전체">전체 기수</option>
+              {cohorts.map((c) => <option key={c.id} value={c.name}>{c.name}</option>)}
             </select>
           </div>
           
@@ -196,9 +197,9 @@ export default function DashboardPage() {
                   <button 
                     className="action-btn" 
                     style={{ background: 'var(--red)', color: 'white', width: 26, height: 26, borderRadius: 6 }} 
-                    onClick={(e) => { 
+                    onClick={async (e) => { 
                       e.stopPropagation(); 
-                      if (deleteCohort(selectedCohort, true)) {
+                      if (await deleteCohort(selectedCohort, true)) {
                         setIsConfirmingDelete(false);
                         setShowEditCohort(false);
                       }

@@ -92,32 +92,31 @@ export default function StudentsPage() {
   const openAdd = () => { setEditTarget(null); setShowModal(true); };
   const openEdit = (s: Student) => { setEditTarget(s); setShowModal(true); setSelected(null); };
 
-  const handleSave = (data: any) => {
+  const handleSave = async (data: any) => {
     const { inputTags, ...studentData } = data;
     
     if (editTarget) {
-      updateStudent(editTarget.id, studentData);
-      if (inputTags) updateStudentTags(editTarget.id, inputTags);
+      await updateStudent(editTarget.id, studentData);
+      if (inputTags) await updateStudentTags(editTarget.id, inputTags);
       toast.success('수강생 정보가 수정되었습니다');
     } else {
-      const newId = addStudent({
+      const newId = await addStudent({
         ...studentData,
         project_scores: [],
         gpa: 0,
         attendance_rate: studentData.attendance_rate || 0,
         joined_at: new Date().toISOString().split('T')[0],
       });
-      if (inputTags) updateStudentTags(newId, inputTags);
-      toast.success('수강생이 추가되었습니다');
+      if (newId && inputTags) await updateStudentTags(newId, inputTags);
+      // toast.success is already called inside addStudent
     }
     setShowModal(false);
   };
 
-  const handleDelete = (id: number) => {
+  const handleDelete = async (id: number) => {
     if (!confirm('정말 삭제하시겠습니까?')) return;
-    deleteStudent(id);
+    await deleteStudent(id);
     if (selected?.id === id) setSelected(null);
-    toast.success('수강생 데이터가 삭제되었습니다');
   };
 
   return (

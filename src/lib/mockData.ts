@@ -14,7 +14,7 @@ export const mockCohorts: Cohort[] = [
 
 export const mockProjects: Project[] = [
   { 
-    id: 1, cohort_id: 2, name: '기초 웹 개발 프로젝트', stage: '완료', description: 'HTML/CSS/JS 기초 활용 프로젝트',
+    id: 1, cohort_id: 2, name: '기초 웹 개발 프로젝트', description: 'HTML/CSS/JS 기초 활용 프로젝트',
     stages: ['기획', '디자인', '개발', '검증', '완료'],
     score_categories: [
       { id: 'planning', label: '기획' },
@@ -24,7 +24,7 @@ export const mockProjects: Project[] = [
     ]
   },
   { 
-    id: 2, cohort_id: 2, name: 'AI 챗봇 서비스 프로젝트', stage: '개발', description: 'GPT API 연동 웹 서비스 개발',
+    id: 2, cohort_id: 2, name: 'AI 챗봇 서비스 프로젝트', description: 'GPT API 연동 웹 서비스 개발',
     stages: ['기획', '디자인', '개발', '검증', '완료'],
     score_categories: [
       { id: 'planning', label: '기획' },
@@ -33,7 +33,7 @@ export const mockProjects: Project[] = [
     ]
   },
   { 
-    id: 3, cohort_id: 1, name: '기업 협업 최종 프로젝트', stage: '완료',
+    id: 3, cohort_id: 1, name: '기업 협업 최종 프로젝트',
     stages: ['기획', '디자인', '개발', '검증', '완료'],
     score_categories: [
       { id: 'dev', label: '개발' },
@@ -48,8 +48,8 @@ export const mockStudents: Student[] = [
     cohort_id: 2, cohort: mockCohorts[1], status: '수강중', joined_at: '2025-03-03', 
     attendance_rate: 85, created_at: '2025-03-03',
     project_scores: [
-      { id: 1, student_id: 1, project_id: 1, project_name: '기초 웹 개발', category_scores: { planning: 4.5, design: 3.5, dev: 4.0, comm: 4.5 }, team_score: 4.5, average_score: 4.12, created_at: d(-30) },
-      { id: 2, student_id: 1, project_id: 2, project_name: 'AI 챗봇 서비스', category_scores: { planning: 4.0, dev: 4.5, comm: 4.0 }, team_score: 4.0, average_score: 4.17, created_at: d(-5) },
+      { id: 1, student_id: 1, project_id: 1, category_scores: { planning: 4.5, design: 3.5, dev: 4.0, comm: 4.5 }, team_score: 4.5, average_score: 4.12, created_at: d(-30) },
+      { id: 2, student_id: 1, project_id: 2, category_scores: { planning: 4.0, dev: 4.5, comm: 4.0 }, team_score: 4.0, average_score: 4.17, created_at: d(-5) },
     ],
     gpa: 4.15
   },
@@ -58,7 +58,7 @@ export const mockStudents: Student[] = [
     cohort_id: 2, cohort: mockCohorts[1], status: '수강중', joined_at: '2025-03-03', 
     attendance_rate: 92, created_at: '2025-03-03',
     project_scores: [
-      { id: 3, student_id: 2, project_id: 1, project_name: '기초 웹 개발', category_scores: { planning: 3.5, design: 5.0, dev: 3.0, comm: 4.5 }, team_score: 4.5, average_score: 4.0, created_at: d(-30) },
+      { id: 3, student_id: 2, project_id: 1, category_scores: { planning: 3.5, design: 5.0, dev: 3.0, comm: 4.5 }, team_score: 4.5, average_score: 4.0, created_at: d(-30) },
     ],
     gpa: 4.0
   },

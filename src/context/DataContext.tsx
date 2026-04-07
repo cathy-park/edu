@@ -1,8 +1,11 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { Student, Project, Team, Consultation, ProjectScore, TeamMember, StudentTag } from '@/lib/types';
-import { mockStudents, mockProjects, mockTeams, mockConsultations, mockTags, mockTeamMembers } from '@/lib/mockData';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { supabase } from '@/lib/supabase';
+import { 
+  Student, Project, Team, Consultation, ProjectScore, 
+  TeamMember, StudentTag 
+} from '@/lib/types';
 import toast from 'react-hot-toast';
 
 interface DataContextType {
@@ -13,39 +16,40 @@ interface DataContextType {
   tags: StudentTag[];
   teamMembers: TeamMember[];
   stages: string[];
+  isLoading: boolean;
   
   // Student CRUD
-  addStudent: (s: Omit<Student, 'id' | 'created_at'>) => number;
-  updateStudent: (id: number, data: Partial<Student>) => void;
-  deleteStudent: (id: number) => void;
+  addStudent: (s: Omit<Student, 'id' | 'created_at' | 'project_scores' | 'gpa' | 'attendance_rate'>) => Promise<number | undefined>;
+  updateStudent: (id: number, data: Partial<Student>) => Promise<void>;
+  deleteStudent: (id: number) => Promise<void>;
   
   // Tag CRUD
-  updateStudentTags: (studentId: number, tags: string[]) => void;
+  updateStudentTags: (studentId: number, tags: string[]) => Promise<void>;
   
   // Team CRUD
-  addTeam: (team: Omit<Team, 'id' | 'created_at'>) => void;
-  updateTeam: (id: number, data: Partial<Team>) => void;
-  deleteTeam: (id: number) => void;
+  addTeam: (team: Omit<Team, 'id' | 'created_at'>) => Promise<void>;
+  updateTeam: (id: number, data: Partial<Team>) => Promise<void>;
+  deleteTeam: (id: number) => Promise<void>;
   
   // Member CRUD
-  addTeamMember: (teamId: number, studentId: number, role?: string) => void;
-  removeTeamMember: (memberId: number) => void;
+  addTeamMember: (teamId: number, studentId: number, role?: string) => Promise<void>;
+  removeTeamMember: (memberId: number) => Promise<void>;
 
-  // Project Score & Category
-  updateProjectScore: (studentId: number, projectId: number, categoryScores: Record<string, number>, teamScore: number) => void;
+  // Project Score
+  updateProjectScore: (studentId: number, projectId: number, categoryScores: Record<string, number>, teamScore: number) => Promise<void>;
   
   // Consultation CRUD
-  addConsultation: (consultation: Omit<Consultation, 'id' | 'created_at'>) => void;
-  updateConsultation: (id: number, data: Partial<Consultation>) => void;
-  deleteConsultation: (id: number) => void;
+  addConsultation: (consultation: Omit<Consultation, 'id' | 'created_at'>) => Promise<void>;
+  updateConsultation: (id: number, data: Partial<Consultation>) => Promise<void>;
+  deleteConsultation: (id: number) => Promise<void>;
 
-  updateTeamProgress: (teamId: number, progress: number) => void;
-  updateTeamScore: (teamId: number, score: number) => void;
-  addProjectCategory: (projectId: number, label: string) => void;
-  deleteProjectCategory: (projectId: number, categoryId: string) => void;
-  deleteProject: (id: number) => void;
-  updateProject: (id: number, data: Partial<Pick<Project, 'name' | 'description' | 'stages'>>) => void;
-  addProject: (p: Omit<Project, 'id' | 'score_categories'>) => number;
+  updateTeamProgress: (teamId: number, progress: number) => Promise<void>;
+  updateTeamScore: (teamId: number, score: number) => Promise<void>;
+  addProjectCategory: (projectId: number, label: string) => Promise<void>;
+  deleteProjectCategory: (projectId: number, categoryId: string) => Promise<void>;
+  deleteProject: (id: number) => Promise<void>;
+  updateProject: (id: number, data: Partial<Pick<Project, 'name' | 'description' | 'stages'>>) => Promise<void>;
+  addProject: (p: Omit<Project, 'id' | 'score_categories'>) => Promise<number | undefined>;
   
   // Stages (Badges) CRUD
   addStage: (stage: string) => void;
@@ -55,212 +59,344 @@ interface DataContextType {
 const DataContext = createContext<DataContextType | undefined>(undefined);
 
 export function DataProvider({ children }: { children: React.ReactNode }) {
-  const [students, setStudents] = useState<Student[]>(mockStudents);
-  const [projects, setProjects] = useState<Project[]>(mockProjects);
-  const [teams, setTeams] = useState<Team[]>(mockTeams);
-  const [consultations, setConsultations] = useState<Consultation[]>(mockConsultations);
-  const [tags, setTags] = useState<StudentTag[]>(mockTags);
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers);
+  const [students, setStudents] = useState<Student[]>([]);
+  const [projects, setProjects] = useState<Project[]>([]);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [consultations, setConsultations] = useState<Consultation[]>([]);
+  const [tags, setTags] = useState<StudentTag[]>([]);
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>([]);
   const [stages, setStages] = useState<string[]>(['기획', '디자인', '개발', '검증', '완료']);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Persistence
-  useEffect(() => {
-    const saved = localStorage.getItem('appData');
-    if (saved) {
-      try {
-        const parsed = JSON.parse(saved);
-        if (parsed.students) setStudents(parsed.students);
-        if (parsed.projects) setProjects(parsed.projects);
-        if (parsed.teams) setTeams(parsed.teams);
-        if (parsed.consultations) setConsultations(parsed.consultations);
-        if (parsed.tags) setTags(parsed.tags);
-        if (parsed.teamMembers) setTeamMembers(parsed.teamMembers);
-        if (parsed.stages) setStages(parsed.stages);
-      } catch (e) {
-        console.error('Failed to load saved data', e);
+  // Fetch all data from Supabase
+  const fetchData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      
+      const [
+        { data: studentsData },
+        { data: projectsData },
+        { data: teamsData },
+        { data: consultsData },
+        { data: tagsData },
+        { data: membersData }
+      ] = await Promise.all([
+        supabase.from('students').select('*, cohorts(*), grades(*), student_tags(*)').order('id', { ascending: false }),
+        supabase.from('projects').select('*').order('id', { ascending: false }),
+        supabase.from('teams').select('*, projects(*)').order('id', { ascending: false }),
+        supabase.from('consultations').select('*').order('id', { ascending: false }),
+        supabase.from('student_tags').select('*'),
+        supabase.from('team_members').select('*, students(*)')
+      ]);
+
+      if (studentsData) {
+        // Map DB grades to project_scores and format
+        const mappedStudents = studentsData.map((s: any) => ({
+          ...s,
+          project_scores: s.grades || []
+        }));
+        setStudents(mappedStudents);
       }
+      if (projectsData) setProjects(projectsData);
+      if (teamsData) setTeams(teamsData);
+      if (consultsData) setConsultations(consultsData);
+      if (tagsData) setTags(tagsData);
+      if (membersData) setTeamMembers(membersData);
+
+    } catch (error) {
+      console.error('Fetch error:', error);
+      toast.error('데이터를 불러오지 못했습니다');
+    } finally {
+      setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('appData', JSON.stringify({ students, projects, teams, consultations, tags, teamMembers, stages }));
-  }, [students, projects, teams, consultations, tags, teamMembers, stages]);
+    fetchData();
+  }, [fetchData]);
 
-  // Student CRUD
-  const addStudent = (s: Omit<Student, 'id' | 'created_at'>) => {
-    const newId = Date.now();
-    const newStudent: Student = { ...s, id: newId, created_at: new Date().toISOString() };
-    setStudents(prev => [newStudent, ...prev]);
-    return newId;
-  };
-  const updateStudent = (id: number, data: Partial<Student>) => {
-    setStudents(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
-  };
-  const deleteStudent = (id: number) => {
-    setStudents(prev => prev.filter(s => s.id !== id));
-  };
+  // Persistence of stages in localStorage (it's a UI preference/config)
+  useEffect(() => {
+    const saved = localStorage.getItem('appStages');
+    if (saved) setStages(JSON.parse(saved));
+  }, []);
 
-  // Tag CRUD
-  const updateStudentTags = (studentId: number, tagStrings: string[]) => {
-    const newTags: StudentTag[] = tagStrings.map((t, idx) => ({
-      id: Date.now() + idx,
-      student_id: studentId,
-      tag: t,
-      created_at: new Date().toISOString()
-    }));
-    setTags(prev => [
-      ...prev.filter(t => t.student_id !== studentId),
-      ...newTags
-    ]);
-  };
+  useEffect(() => {
+    localStorage.setItem('appStages', JSON.stringify(stages));
+  }, [stages]);
 
-  // Team CRUD
-  const addTeam = (t: Omit<Team, 'id' | 'created_at'>) => {
-    const newTeam: Team = { ...t, id: Date.now(), created_at: new Date().toISOString() };
-    setTeams(prev => [newTeam, ...prev]);
-  };
-  const updateTeam = (id: number, data: Partial<Team>) => {
-    setTeams(prev => prev.map(t => {
-      if (t.id === id) {
-        const newData = { ...t, ...data };
-        
-        // Auto-calculate progress if stage changed
-        if (data.stage) {
-          const project = projects.find(p => p.id === t.project_id);
-          if (project && project.stages && project.stages.length > 0) {
-            const stageIndex = project.stages.indexOf(data.stage);
-            if (stageIndex >= 0) {
-              newData.progress_pct = Math.round(((stageIndex + 1) / project.stages.length) * 100);
-            }
-          }
-        }
-        
-        return newData;
-      }
-      return t;
-    }));
-  };
-  const deleteTeam = (id: number) => {
-    setTeams(prev => prev.filter(t => t.id !== id));
-    setTeamMembers(prev => prev.filter(tm => tm.team_id !== id));
-  };
+  // --- CRUD FUNCTIONS (Updated to call Supabase) ---
 
-  // Member CRUD
-  const addTeamMember = (teamId: number, studentId: number, role?: string) => {
-    const newMember: TeamMember = {
-      id: Date.now(),
-      team_id: teamId,
-      student_id: studentId,
-      role,
-      joined_at: new Date().toISOString().split('T')[0]
+  const addStudent = async (s: Omit<Student, 'id' | 'created_at' | 'project_scores' | 'gpa' | 'attendance_rate'>) => {
+    // Explicitly pick only the columns that exist in the DB
+    const insertData = {
+      name: s.name,
+      age: s.age,
+      phone: s.phone,
+      email: s.email,
+      cohort_id: s.cohort_id,
+      status: s.status,
+      profile_image_url: s.profile_image_url,
+      joined_at: s.joined_at,
+      note: s.note
     };
-    setTeamMembers(prev => [...prev, newMember]);
+
+    const { data, error } = await supabase
+      .from('students')
+      .insert([insertData])
+      .select('*, cohorts(*), grades(*)')
+      .single();
+
+    if (error) {
+      console.error('Insert student error:', error);
+      toast.error('수강생 추가에 실패했습니다');
+      return undefined;
+    } else if (data) {
+      const newStudent = { ...data, project_scores: data.grades || [] };
+      setStudents(prev => [newStudent, ...prev]);
+      toast.success('수강생이 추가되었습니다');
+      return data.id;
+    }
   };
-  const removeTeamMember = (id: number) => {
-    setTeamMembers(prev => prev.filter(tm => tm.id !== id));
-  };
 
-  const updateProjectScore = (studentId: number, projectId: number, categoryScores: Record<string, number>, teamScore: number) => {
-    setStudents(prev => prev.map(s => {
-      if (s.id === studentId) {
-        const existingScoreIndex = s.project_scores.findIndex(ps => ps.project_id === projectId);
-        let newScores = [...s.project_scores];
-        
-        const catsCount = Object.keys(categoryScores).length;
-        const catAvg = catsCount > 0 ? Object.values(categoryScores).reduce((a, b) => a + b, 0) / catsCount : 0;
-        const average_score = catAvg;
-
-        const newScore: ProjectScore = {
-          id: existingScoreIndex >= 0 ? s.project_scores[existingScoreIndex].id : Date.now(),
-          student_id: studentId,
-          project_id: projectId,
-          category_scores: categoryScores,
-          team_score: teamScore,
-          average_score,
-          created_at: new Date().toISOString()
-        };
-
-        if (existingScoreIndex >= 0) {
-          newScores[existingScoreIndex] = newScore;
-        } else {
-          newScores.push(newScore);
-        }
-
-        const totalAvg = newScores.reduce((a, b) => a + b.average_score, 0) / newScores.length;
-        return { ...s, project_scores: newScores, gpa: totalAvg };
+  const updateStudent = async (id: number, data: Partial<Student>) => {
+    // Clean data for Supabase update
+    const updateData: any = {};
+    const allowedKeys = ['name', 'age', 'phone', 'email', 'cohort_id', 'status', 'profile_image_url', 'joined_at', 'gpa', 'attendance_rate', 'note'];
+    
+    Object.keys(data).forEach(key => {
+      if (allowedKeys.includes(key)) {
+        updateData[key] = (data as any)[key];
       }
-      return s;
-    }));
+    });
+
+    const { error } = await supabase.from('students').update(updateData).eq('id', id);
+
+    if (error) {
+      console.error('Update student error:', error);
+      toast.error('정보 수정에 실패했습니다');
+    } else {
+      setStudents(prev => prev.map(s => s.id === id ? { ...s, ...data } : s));
+    }
   };
 
-  // Consultation CRUD
-  const addConsultation = (c: Omit<Consultation, 'id' | 'created_at'>) => {
-    const newC: Consultation = { ...c, id: Date.now(), created_at: new Date().toISOString() };
-    setConsultations(prev => [newC, ...prev]);
-  };
-  const updateConsultation = (id: number, data: Partial<Consultation>) => {
-    setConsultations(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
-  };
-  const deleteConsultation = (id: number) => {
-    setConsultations(prev => prev.filter(c => c.id !== id));
+  const deleteStudent = async (id: number) => {
+    const { error } = await supabase.from('students').delete().eq('id', id);
+    if (error) {
+      toast.error('삭제에 실패했습니다');
+    } else {
+      setStudents(prev => prev.filter(s => s.id !== id));
+      toast.success('삭제되었습니다');
+    }
   };
 
-  const updateTeamProgress = (teamId: number, progress: number) => {
-    setTeams(prev => prev.map(t => t.id === teamId ? { ...t, progress_pct: progress } : t));
+  const updateStudentTags = async (studentId: number, tagStrings: string[]) => {
+    const { error: delError } = await supabase.from('student_tags').delete().eq('student_id', studentId);
+    if (delError) { toast.error('태그 수정에 실패했습니다'); return; }
+
+    if (tagStrings.length > 0) {
+      const newTags = tagStrings.map(t => ({ student_id: studentId, tag: t }));
+      const { data, error: insError } = await supabase.from('student_tags').insert(newTags).select();
+      if (insError) {
+        toast.error('태그 저장에 실패했습니다');
+      } else {
+        setTags(prev => [...prev.filter(t => t.student_id !== studentId), ...(data || [])]);
+      }
+    } else {
+      setTags(prev => prev.filter(t => t.student_id !== studentId));
+    }
   };
 
-  const updateTeamScore = (teamId: number, score: number) => {
+  const addTeam = async (t: Omit<Team, 'id' | 'created_at'>) => {
+    const insertData = {
+      project_id: t.project_id,
+      team_name: t.team_name,
+      stage: t.stage,
+      progress_pct: t.progress_pct,
+      leader_id: t.leader_id,
+      memo: t.memo,
+      project_link: t.project_link
+    };
+    
+    const { data, error } = await supabase.from('teams').insert([insertData]).select('*, projects(*)').single();
+    if (error) {
+      console.error('Add team error:', error);
+      toast.error('팀 생성에 실패했습니다');
+    } else if (data) {
+      setTeams(prev => [data, ...prev]);
+      toast.success('팀이 생성되었습니다');
+    }
+  };
+
+  const updateTeam = async (id: number, data: Partial<Team>) => {
+    const updateData: any = {};
+    const allowedKeys = ['project_id', 'team_name', 'stage', 'progress_pct', 'leader_id', 'memo', 'project_link'];
+    
+    Object.keys(data).forEach(key => {
+      if (allowedKeys.includes(key)) {
+        updateData[key] = (data as any)[key];
+      }
+    });
+
+    const { error } = await supabase.from('teams').update(updateData).eq('id', id);
+    if (error) {
+      console.error('Update team error:', error);
+      toast.error('팀 정보 수정 실패');
+    } else {
+      setTeams(prev => prev.map(t => t.id === id ? { ...t, ...data } : t));
+    }
+  };
+
+  const deleteTeam = async (id: number) => {
+    const { error } = await supabase.from('teams').delete().eq('id', id);
+    if (error) {
+      toast.error('팀 삭제 실패');
+    } else {
+      setTeams(prev => prev.filter(t => t.id !== id));
+      setTeamMembers(prev => prev.filter(tm => tm.team_id !== id));
+    }
+  };
+
+  const addTeamMember = async (teamId: number, studentId: number, role?: string) => {
+    const { data, error } = await supabase
+      .from('team_members')
+      .insert([{ team_id: teamId, student_id: studentId, role }])
+      .select('*, students(*)')
+      .single();
+    if (error) {
+      toast.error('팀원 추가 실패');
+    } else if (data) {
+      setTeamMembers(prev => [...prev, data]);
+    }
+  };
+
+  const removeTeamMember = async (id: number) => {
+    const { error } = await supabase.from('team_members').delete().eq('id', id);
+    if (error) {
+      toast.error('팀원 제거 실패');
+    } else {
+      setTeamMembers(prev => prev.filter(tm => tm.id !== id));
+    }
+  };
+
+  const updateProjectScore = async (studentId: number, projectId: number, categoryScores: Record<string, number>, teamScore: number) => {
+    const catsCount = Object.keys(categoryScores).length;
+    const average_score = catsCount > 0 ? Object.values(categoryScores).reduce((a, b) => a + b, 0) / catsCount : 0;
+
+    const upsertData = {
+      student_id: studentId,
+      project_id: projectId,
+      category_scores: categoryScores,
+      team_score: teamScore,
+      average_score
+    };
+
+    const { data, error } = await supabase.from('grades').upsert(upsertData).select().single();
+    if (error) {
+       toast.error('성적 저장 실패');
+    } else if (data) {
+      setStudents(prev => prev.map(s => {
+        if (s.id === studentId) {
+          const existingScoreIndex = s.project_scores.findIndex(ps => ps.project_id === projectId);
+          let newScores = [...s.project_scores];
+          if (existingScoreIndex >= 0) newScores[existingScoreIndex] = data;
+          else newScores.push(data);
+          
+          const totalAvg = newScores.length > 0 ? newScores.reduce((a, b) => a + b.average_score, 0) / newScores.length : 0;
+          return { ...s, project_scores: newScores, gpa: totalAvg };
+        }
+        return s;
+      }));
+    }
+  };
+
+  const addConsultation = async (c: Omit<Consultation, 'id' | 'created_at'>) => {
+    const { data, error } = await supabase.from('consultations').insert([c]).select().single();
+    if (error) {
+      toast.error('상담 저장 실패');
+    } else if (data) {
+      setConsultations(prev => [data, ...prev]);
+      toast.success('상담이 저장되었습니다');
+    }
+  };
+
+  const updateConsultation = async (id: number, data: Partial<Consultation>) => {
+    const { error } = await supabase.from('consultations').update(data).eq('id', id);
+    if (error) {
+      toast.error('상담 수정 실패');
+    } else {
+      setConsultations(prev => prev.map(c => c.id === id ? { ...c, ...data } : c));
+    }
+  };
+
+  const deleteConsultation = async (id: number) => {
+    const { error } = await supabase.from('consultations').delete().eq('id', id);
+    if (error) {
+      toast.error('상담 삭제 실패');
+    } else {
+      setConsultations(prev => prev.filter(c => c.id !== id));
+    }
+  };
+
+  const updateTeamProgress = async (teamId: number, progress: number) => {
+    const { error } = await supabase.from('teams').update({ progress_pct: progress }).eq('id', teamId);
+    if (!error) setTeams(prev => prev.map(t => t.id === teamId ? { ...t, progress_pct: progress } : t));
+  };
+
+  const updateTeamScore = async (teamId: number, score: number) => {
+    // This is a bulk update of students in a team
+    const members = teamMembers.filter(m => m.team_id === teamId);
     const team = teams.find(t => t.id === teamId);
     if (!team) return;
-    const members = teamMembers.filter(m => m.team_id === teamId);
-    members.forEach(m => {
+
+    for (const m of members) {
       const student = students.find(s => s.id === m.student_id);
       const scoreObj = student?.project_scores.find(ps => ps.project_id === team.project_id);
-      updateProjectScore(m.student_id, team.project_id, scoreObj?.category_scores || {}, score);
-    });
+      await updateProjectScore(m.student_id, team.project_id, scoreObj?.category_scores || {}, score);
+    }
   };
 
-  const addProjectCategory = (projectId: number, label: string) => {
-    setProjects(prev => prev.map(p => {
-      if (p.id === projectId) {
-        const newId = label.toLowerCase().replace(/\s+/g, '_');
-        if (p.score_categories.some(c => c.id === newId)) {
-          toast.error('이미 존재하는 항목명입니다');
-          return p;
-        }
-        return { ...p, score_categories: [...p.score_categories, { id: newId, label }] };
-      }
-      return p;
-    }));
+  const addProjectCategory = async (projectId: number, label: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    const newId = label.toLowerCase().replace(/\s+/g, '_');
+    if (project.score_categories.some(c => c.id === newId)) {
+      toast.error('이미 존재하는 항목명입니다');
+      return;
+    }
+    const newCategories = [...project.score_categories, { id: newId, label }];
+    const { error } = await supabase.from('projects').update({ score_categories: newCategories }).eq('id', projectId);
+    if (!error) setProjects(prev => prev.map(p => p.id === projectId ? { ...p, score_categories: newCategories } : p));
   };
 
-  const deleteProjectCategory = (projectId: number, categoryId: string) => {
-    setProjects(prev => prev.map(p => {
-      if (p.id === projectId) {
-        if (p.score_categories.length <= 1) {
-          toast.error('최소 1개의 평가 항목은 있어야 합니다');
-          return p;
-        }
-        return { ...p, score_categories: p.score_categories.filter(c => c.id !== categoryId) };
-      }
-      return p;
-    }));
+  const deleteProjectCategory = async (projectId: number, categoryId: string) => {
+    const project = projects.find(p => p.id === projectId);
+    if (!project) return;
+    if (project.score_categories.length <= 1) {
+      toast.error('최소 1개의 평가 항목은 있어야 합니다');
+      return;
+    }
+    const newCategories = project.score_categories.filter(c => c.id !== categoryId);
+    const { error } = await supabase.from('projects').update({ score_categories: newCategories }).eq('id', projectId);
+    if (!error) setProjects(prev => prev.map(p => p.id === projectId ? { ...p, score_categories: newCategories } : p));
   };
 
-  const deleteProject = (id: number) => {
-    setProjects(prev => prev.filter(p => p.id !== id));
-    setTeams(prev => prev.filter(t => t.project_id !== id));
+  const deleteProject = async (id: number) => {
+    const { error } = await supabase.from('projects').delete().eq('id', id);
+    if (!error) {
+      setProjects(prev => prev.filter(p => p.id !== id));
+      setTeams(prev => prev.filter(t => t.project_id !== id));
+    }
   };
 
-  const updateProject = (id: number, data: Partial<Pick<Project, 'name' | 'description' | 'stages'>>) => {
-    setProjects(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+  const updateProject = async (id: number, data: Partial<Pick<Project, 'name' | 'description' | 'stages'>>) => {
+    const { error } = await supabase.from('projects').update(data).eq('id', id);
+    if (!error) setProjects(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
   };
 
-  const addProject = (p: Omit<Project, 'id' | 'score_categories'>) => {
-    const newId = Date.now();
-    const newProject: Project = {
+  const addProject = async (p: Omit<Project, 'id' | 'score_categories'>) => {
+    const newProjectData = {
       ...p,
-      id: newId,
       stages: p.stages || ['기획', '디자인', '개발', '검증', '완료'],
       score_categories: [
         { id: 'planning', label: '기획' },
@@ -269,8 +405,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         { id: 'communication', label: '소통' }
       ]
     };
-    setProjects(prev => [...prev, newProject]);
-    return newId;
+    const { data, error } = await supabase.from('projects').insert([newProjectData]).select().single();
+    if (error) {
+      toast.error('프로젝트 생성 실패');
+      return undefined;
+    } else if (data) {
+      setProjects(prev => [...prev, data]);
+      return data.id;
+    }
   };
 
   const addStage = (stage: string) => {
@@ -284,7 +426,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   return (
     <DataContext.Provider value={{ 
-      students, projects, teams, consultations, tags, teamMembers, stages,
+      students, projects, teams, consultations, tags, teamMembers, stages, isLoading,
       addStudent, updateStudent, deleteStudent, updateStudentTags,
       addTeam, updateTeam, deleteTeam, addTeamMember, removeTeamMember,
       updateProjectScore, addConsultation, updateConsultation, deleteConsultation, 
