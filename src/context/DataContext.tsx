@@ -95,18 +95,27 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     try {
       setIsLoading(true);
       
+      // Simple connectivity check
+      const { error: connError } = await supabase.from('students').select('id').limit(1);
+      if (connError) {
+        console.error('Supabase connectivity check failed:', connError.message);
+        toast.error(`데이터베이스 연결 오류: ${connError.message}`);
+      } else {
+        console.log('Supabase connected successfully');
+      }
+
       const [
-        { data: studentsData },
-        { data: projectsData },
-        { data: teamsData },
-        { data: consultsData },
-        { data: tagsData },
-        { data: membersData },
-        { data: workTasksData },
-        { data: todosData },
-        { data: schedulesData }
+        { data: studentsData, error: sErr },
+        { data: projectsData, error: pErr },
+        { data: teamsData, error: tErr },
+        { data: consultsData, error: cErr },
+        { data: tagsData, error: tgErr },
+        { data: membersData, error: mErr },
+        { data: workTasksData, error: wErr },
+        { data: todosData, error: tdErr },
+        { data: schedulesData, error: scErr }
       ] = await Promise.all([
-        supabase.from('students').select('*, cohorts(*), grades(*), student_tags(*)').order('id', { ascending: false }),
+        supabase.from('students').select('*, cohorts(*), grades(*)').order('id', { ascending: false }),
         supabase.from('projects').select('*').order('id', { ascending: false }),
         supabase.from('teams').select('*, projects(*)').order('id', { ascending: false }),
         supabase.from('consultations').select('*').order('id', { ascending: false }),
@@ -117,8 +126,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         supabase.from('schedules').select('*').order('id', { ascending: false })
       ]);
 
+      // Log any fetch errors
+      [sErr, pErr, tErr, cErr, tgErr, mErr, wErr, tdErr, scErr].forEach(err => {
+        if (err) console.error('Fetch error detail:', err.message);
+      });
+
       if (studentsData) {
-        // Map DB grades to project_scores and format
         const mappedStudents = studentsData.map((s: any) => ({
           ...s,
           project_scores: s.grades || []
@@ -144,7 +157,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
-      toast.error('Supabase 연동 설정이 되어 있지 않습니다. .env.local 파일을 확인해주세요.', { duration: 10000 });
+      toast.error('Supabase 연동 설정이 되어 있지 않습니다. Vercel 환경 변수를 확인해주세요.', { duration: 10000 });
     }
     fetchData();
   }, [fetchData]);
@@ -159,13 +172,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     localStorage.setItem('appStages', JSON.stringify(stages));
   }, [stages]);
 
-  // --- CRUD FUNCTIONS (Updated to call Supabase) ---
+  // --- CRUD FUNCTIONS (Updated with better error handling) ---
 
   const addStudent = async (s: Omit<Student, 'id' | 'created_at' | 'project_scores'>) => {
-    // Explicitly handle invalid cohort_id (NaN prevention)
     const cohortId = (s.cohort_id === undefined || isNaN(Number(s.cohort_id))) ? null : Number(s.cohort_id);
 
-    // Explicitly pick only the columns that exist in the DB
     const insertData = {
       name: s.name,
       age: s.age,
@@ -187,12 +198,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       .single();
 
     if (error) {
-      console.error('Insert student error detail:', error.message, error.details, error.hint);
-      toast.error(`수강생 추가 실패: ${error.message}`);
+      console.error('Insert student error:', error.message, error.details);
+      toast.error(`학생 추가 실패: ${error.message} (${error.hint || '권한/데이터 확인'})`);
       return undefined;
     } else if (!data) {
-      console.error('Insert student returned no data (check RLS policies)');
-      toast.error('데이터베이스 저장에 실패했습니다. (권한 확인 필요)');
+      toast.error('학생이 추가되었으나 데이터를 받지 못했습니다. (RLS 확인 필요)');
       return undefined;
     } else {
       const newStudent = { ...data, project_scores: data.grades || [] };
@@ -261,11 +271,15 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       project_link: t.project_link
     };
     
-    const { data, error } = await supabase.from('teams').insert([insertData]).select('*, projects(*)').single();
+    const { data, error } = await supabase.from('teams').insert([insertData]).select().single();
     if (error) {
-      console.error('Add team error:', error);
-      toast.error('팀 생성에 실패했습니다');
-    } else if (data) {
+      console.error('Insert team error:', error.message, error.details);
+      toast.error(`팀 생성 실패: ${error.message} (${error.hint || '데이터 확인'})`);
+    } else if (!data) {
+      toast.error('팀이 생성되었으나 데이터를 받지 못했습니다. (RLS 확인 필요)');
+    } else {
+      // Re-fetch or manually construct team with project info if needed
+      // For now, just add to state
       setTeams(prev => [data, ...prev]);
       toast.success('팀이 생성되었습니다');
     }
@@ -438,7 +452,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addProject = async (p: Omit<Project, 'id' | 'score_categories'>) => {
-    const newProjectData = {
+    const insertData = {
       ...p,
       stages: p.stages || ['기획', '디자인', '개발', '검증', '완료'],
       score_categories: [
@@ -448,12 +462,17 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         { id: 'communication', label: '소통' }
       ]
     };
-    const { data, error } = await supabase.from('projects').insert([newProjectData]).select().single();
+    const { data, error } = await supabase.from('projects').insert([insertData]).select().single();
     if (error) {
-      toast.error('프로젝트 생성 실패');
+      console.error('Insert project error:', error.message, error.details);
+      toast.error(`프로젝트 생성 실패: ${error.message} (${error.hint || '데이터 확인'})`);
       return undefined;
-    } else if (data) {
-      setProjects(prev => [...prev, data]);
+    } else if (!data) {
+      toast.error('프로젝트가 생성되었으나 데이터를 받지 못했습니다. (RLS 확인 필요)');
+      return undefined;
+    } else {
+      setProjects(prev => [data, ...prev]);
+      toast.success('프로젝트가 생성되었습니다');
       return data.id;
     }
   };
