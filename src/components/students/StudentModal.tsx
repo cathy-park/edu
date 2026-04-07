@@ -36,6 +36,7 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
     email: student?.email ?? '',
     cohort_id: defaultCohortId,
     status: (student?.status ?? '수강중') as StudentStatus,
+    experience: student?.experience ?? '비전공자',
     note: student?.note ?? '',
   });
 
@@ -74,6 +75,7 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
       email: form.email.trim(),
       cohort_id: finalCohortId,
       status: form.status,
+      experience: form.experience,
       note: form.note,
       inputTags: tags,
     });
@@ -95,9 +97,18 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
               <label className="form-label">이름 *</label>
               <input className="form-input" value={form.name} onChange={(e) => set('name', e.target.value)} placeholder="홍길동" />
             </div>
-            <div className="form-field">
+            <div className="form-field" style={{ flex: 0.6 }}>
               <label className="form-label">나이</label>
               <input className="form-input" type="number" value={form.age} onChange={(e) => set('age', e.target.value)} placeholder="24" />
+            </div>
+            <div className="form-field">
+              <label className="form-label">경력 구분</label>
+              <select className="form-select" value={form.experience} onChange={(e) => set('experience', e.target.value)}>
+                <option value="비전공자">비전공자</option>
+                <option value="전공자">전공자</option>
+                <option value="국비수료">국비수료</option>
+                <option value="실무경력">실무경력</option>
+              </select>
             </div>
           </div>
 

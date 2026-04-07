@@ -68,6 +68,7 @@ create table public.students (
   joined_at date not null default current_date,
   gpa decimal(3,2) default 0,
   attendance_rate smallint default 0,
+  experience varchar(50) default '비전공자',
   note text,
   created_at timestamptz default now(),
   updated_at timestamptz default now()

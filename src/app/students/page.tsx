@@ -160,6 +160,7 @@ export default function StudentsPage() {
             <tr>
               <th>이름</th>
               <th>기수</th>
+              <th>경력</th>
               <th>나이</th>
               <th>연락처</th>
               <th>상태</th>
@@ -172,7 +173,7 @@ export default function StudentsPage() {
           <tbody>
             {paged.length === 0 ? (
               <tr>
-                <td colSpan={9}>
+                <td colSpan={11}>
                   <div className="empty-state">
                     <div className="empty-icon">🔍</div>
                     <div>검색 결과가 없습니다</div>
@@ -186,6 +187,7 @@ export default function StudentsPage() {
                   <tr key={s.id} onClick={() => setSelected(s)}>
                     <td className="td-name">{s.name}</td>
                     <td className="td-muted">{s.cohort?.name ?? '-'}</td>
+                    <td className="td-muted">{s.experience || '비전공자'}</td>
                     <td className="td-muted">{s.age ? `${s.age}세` : '-'}</td>
                     <td className="td-muted">{s.phone ?? '-'}</td>
                     <td><span className={`badge badge-${s.status}`}>{s.status}</span></td>

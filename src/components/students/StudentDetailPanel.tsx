@@ -190,6 +190,7 @@ export default function StudentDetailPanel({
                  <div className="p-meta-chips">
                     <span className="p-meta-chip">{student.cohort?.name}</span>
                     <span className="p-meta-chip">{student.age}세</span>
+                    <span className="p-meta-chip">{student.experience || '비전공자'}</span>
                     <span className="p-meta-chip">{student.email}</span>
                  </div>
               </div>

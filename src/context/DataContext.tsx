@@ -191,6 +191,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       joined_at: s.joined_at,
       gpa: s.gpa || 0,
       attendance_rate: s.attendance_rate || 0,
+      experience: s.experience,
       note: s.note
     };
 
@@ -222,7 +223,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const updateStudent = async (id: number, data: Partial<Student>) => {
     // Clean data for Supabase update
     const updateData: any = {};
-    const allowedKeys = ['name', 'age', 'phone', 'email', 'cohort_id', 'status', 'profile_image_url', 'joined_at', 'gpa', 'attendance_rate', 'note'];
+    const allowedKeys = ['name', 'age', 'phone', 'email', 'cohort_id', 'status', 'profile_image_url', 'joined_at', 'gpa', 'attendance_rate', 'experience', 'note'];
     
     Object.keys(data).forEach(key => {
       if (allowedKeys.includes(key)) {

@@ -42,6 +42,7 @@ export interface Student {
   joined_at: string;
   gpa: number;
   attendance_rate: number;
+  experience?: string;
   note?: string;
   project_scores: ProjectScore[];
   created_at?: string;
