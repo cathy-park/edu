@@ -22,10 +22,18 @@ function ProjectManagementContent() {
     addProject, deleteProject, updateProject, addConsultation,
     addProjectCategory, deleteProjectCategory
   } = useData();
+  const { cohorts } = useCohort();
   
+  const currentCohortId = useMemo(() => {
+    if (selectedCohort === '전체') {
+      return cohorts[0]?.id || 0;
+    }
+    return cohorts.find(c => c.name === selectedCohort)?.id || 0;
+  }, [selectedCohort, cohorts]);
+
   const cohortProjects = useMemo(() => 
-    projects.filter(p => selectedCohort === '전체' || p.cohort_id === (selectedCohort === '24기' ? 1 : 2)),
-    [selectedCohort, projects]
+    projects.filter(p => selectedCohort === '전체' || p.cohort_id === currentCohortId),
+    [selectedCohort, projects, currentCohortId]
   );
 
   const [selectedProjectId, setSelectedProjectId] = useState<number>(0);
@@ -72,9 +80,16 @@ function ProjectManagementContent() {
   }>({
     name: '',
     description: '',
-    cohort_id: selectedCohort === '24기' ? 1 : selectedCohort === '25기' ? 2 : 1,
+    cohort_id: 0,
     stages: ['기획', '디자인', '개발', '검증', '완료']
   });
+
+  // Sync projectForm cohort_id when selectedCohort changes
+  useEffect(() => {
+    if (!showProjectModal) {
+      setProjectForm(prev => ({ ...prev, cohort_id: currentCohortId }));
+    }
+  }, [currentCohortId, showProjectModal]);
   
   const [editingProject, setEditingProject] = useState<number | null>(null);
   const [newCatLabel, setNewCatLabel] = useState('');
@@ -128,7 +143,7 @@ function ProjectManagementContent() {
       setProjectForm({
         name: '',
         description: '',
-        cohort_id: selectedCohort === '24기' ? 1 : selectedCohort === '25기' ? 2 : 1,
+        cohort_id: currentCohortId,
         stages: ['기획', '디자인', '개발', '검증', '완료']
       });
     }

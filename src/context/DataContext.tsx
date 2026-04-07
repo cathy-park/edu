@@ -465,6 +465,13 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         { id: 'communication', label: '소통' }
       ]
     };
+
+    if (!insertData.cohort_id || insertData.cohort_id === 0) {
+      console.error('Insert project rejected: cohort_id is 0 or missing');
+      toast.error('유효한 기수를 선택해주세요.');
+      return undefined;
+    }
+
     const { data, error } = await supabase.from('projects').insert([insertData]).select().single();
     if (error) {
       console.error('Insert project error:', error.message, error.details);
