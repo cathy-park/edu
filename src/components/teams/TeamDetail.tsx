@@ -31,7 +31,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     projectLogs, addProjectLog, updateProjectLog, deleteProjectLog, updateTeamProjectScore
   } = useData();
 
-  console.log("TeamDetail Version: [v8.11] Rendered for Team ID:", team.id);
+  console.log("TeamDetail [v8.12] Rendered");
   
   const project = projects.find(p => p.id === team.project_id);
   const members = teamMembers.filter(m => m.team_id === team.id);
@@ -55,15 +55,21 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
   const [categoryScores, setCategoryScores] = useState<Record<string, number>>({});
 
+  // Reset type when student_id changes to prevent enum errors
+  useEffect(() => {
+    if (Number(logForm.student_id) === -1) {
+      setLogForm(prev => ({ ...prev, type: '회의록' }));
+    } else {
+      setLogForm(prev => ({ ...prev, type: '개인상담' }));
+    }
+  }, [logForm.student_id]);
+
   useEffect(() => {
     if (members.length > 0) {
       const firstMember = students.find(s => s.id === members[0].student_id);
       if (firstMember) {
         const existingScore = firstMember.project_scores.find(ps => ps.project_id === team.project_id);
         if (existingScore) {
-          console.groupCollapsed("Loaded Scores for Team %d", team.id);
-          console.log("Existing Score Found:", existingScore.category_scores);
-          console.groupEnd();
           setCategoryScores(existingScore.category_scores || {});
           return;
         }
@@ -80,19 +86,12 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     return Math.round(avg * 10) / 10;
   }, [categoryScores]);
 
-  const handleSaveInfo = () => {
-    updateTeam(team.id, { project_link: projectLink, memo: teamMemo });
-    toast.success('팀 정보가 저장되었습니다');
-  };
-
   const handleSaveScores = async () => {
-    console.log("Saving Team Scores:", categoryScores);
     await updateTeamProjectScore(team.id, team.project_id, categoryScores, overallScore);
     toast.success('팀 성취도가 저장되었습니다');
   };
 
   const handleSetLeader = (studentId: number) => {
-    console.log("Setting Team Leader to member ID or student ID:", studentId);
     updateTeam(team.id, { leader_id: studentId });
     toast.success('팀장이 변경되었습니다');
   };
@@ -101,49 +100,33 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     if (!logForm.content.trim()) return toast.error('내용을 입력하세요');
     const combinedDateTime = `${logForm.date}T${logForm.time}:00`;
 
+    // Map common names to DB Enums to be safe
+    let finalType = logForm.type;
+    if (Number(logForm.student_id) !== -1) {
+      if (finalType === '회의록') finalType = '기타'; // Prevention
+    }
+
     try {
       if (editingLog) {
         if (editingLog.isTeam) {
-          await updateProjectLog(editingLog.id, {
-            content: logForm.content,
-            log_date: logForm.date,
-            type: logForm.type as any,
-          });
+          await updateProjectLog(editingLog.id, { content: logForm.content, log_date: logForm.date, type: finalType as any });
         } else {
-          await updateConsultation(editingLog.id, {
-            content: logForm.content,
-            consulted_at: combinedDateTime,
-            type: logForm.type as any,
-            student_id: logForm.student_id
-          });
+          await updateConsultation(editingLog.id, { content: logForm.content, consulted_at: combinedDateTime, type: finalType as any, student_id: logForm.student_id });
         }
         toast.success('기록이 수정되었습니다');
       } else {
         if (Number(logForm.student_id) === -1) {
-          await addProjectLog({
-            team_id: team.id,
-            log_date: logForm.date,
-            type: logForm.type as any,
-            content: logForm.content,
-            title: logForm.type
-          });
+          await addProjectLog({ team_id: team.id, log_date: logForm.date, type: finalType as any, content: logForm.content, title: finalType });
           toast.success('팀 활동 로그가 추가되었습니다');
         } else {
-          await addConsultation({
-            student_id: Number(logForm.student_id),
-            project_id: team.project_id,
-            content: logForm.content,
-            consulted_at: combinedDateTime,
-            type: logForm.type as any
-          });
+          await addConsultation({ student_id: Number(logForm.student_id), project_id: team.project_id, content: logForm.content, consulted_at: combinedDateTime, type: finalType as any });
           toast.success('개인 로그가 추가되었습니다');
         }
       }
+      setShowLogModal(false);
     } catch (err) { 
       console.error("Log Submission Error:", err);
-      toast.error('로그 저장 중 오류가 발생했습니다');
     }
-    setShowLogModal(false);
   };
 
   const teamTimeline = useMemo(() => {
@@ -160,79 +143,69 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
     try {
-      const d = parseISO(dateStr);
+      const d = parseISO(dateStr.replace(' ', 'T'));
       return format(d, 'MM-dd HH:mm');
     } catch (e) {
-      const d = new Date(dateStr);
-      return isNaN(d.getTime()) ? dateStr : format(d, 'MM-dd HH:mm');
+      return dateStr.slice(5, 16);
     }
   };
 
   return (
     <div className="detail-panel-overlay" onClick={onClose}>
-      <div className="detail-panel" onClick={e => e.stopPropagation()} style={{ width: 500 }}>
+      <div className="detail-panel" onClick={e => e.stopPropagation()} style={{ width: 520, borderRadius: '0 0 0 24px' }}>
         
-        <div className="detail-panel-header" style={{ position: 'relative', padding: '32px 24px 24px' }}>
-          <button 
-             className="action-btn" 
-             onClick={onClose} 
-             style={{ position: 'absolute', top: 20, right: 20, width: 36, height: 36, color: 'var(--text-primary)', background: 'var(--bg-hover)' }}>
-             <X size={20} />
-          </button>
+        <div className="detail-panel-header" style={{ padding: '32px 32px 24px' }}>
+          <button className="close-btn" onClick={onClose} style={{ position: 'absolute', top: 24, right: 24, width: 40, height: 40, background: 'var(--bg-hover)', borderRadius: 12, border: 'none', color: 'var(--text-primary)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><X size={20} /></button>
           
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <div className="detail-avatar" style={{ width: 48, height: 48, fontSize: 20, border: '2px solid var(--accent)' }}>{team.team_name[0]}</div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <div className="detail-avatar" style={{ width: 56, height: 56, fontSize: 24, background: 'var(--accent)', color: 'white', fontWeight: 800 }}>{team.team_name[0]}</div>
             <div>
-              <h2 className="page-title" style={{ margin: 0, fontSize: 22 }}>{team.team_name} <small style={{ fontSize: 10, opacity: 0.5 }}>v8.11</small></h2>
-              <div className="page-subtitle" style={{ fontSize: 13 }}>{project?.name}</div>
+              <h2 className="page-title" style={{ margin: 0, fontSize: 26, letterSpacing: '-0.02em' }}>{team.team_name} <small style={{ fontSize: 10, opacity: 0.4 }}>v8.12</small></h2>
+              <div className="page-subtitle" style={{ fontSize: 14, fontWeight: 500, opacity: 0.6 }}>{project?.name}</div>
             </div>
           </div>
         </div>
 
-        <div className="detail-tabs">
+        <div className="detail-panel-tabs" style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)', padding: '0 32px' }}>
            {[
-             { id: 'info', label: '팀 정보', icon: Users },
+             { id: 'info', label: '공동 작업', icon: Users },
              { id: 'eval', label: '성과 평가', icon: Award },
-             { id: 'logs', label: '활동 로그', icon: MessageSquare }
+             { id: 'logs', label: '활동 피드', icon: MessageSquare }
            ].map(tab => (
-             <button 
-                key={tab.id} 
-                onClick={() => setActiveTab(tab.id as any)} 
-                className={`tab-btn ${activeTab === tab.id ? 'active' : ''}`}
-                style={{ flex: 1, padding: '16px 0', border: 'none', background: 'none', fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500, color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)', borderBottom: `2.5px solid ${activeTab === tab.id ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.2s' }}>
-                {tab.label}
+             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} style={{ padding: '20px 0', marginRight: 32, border: 'none', background: 'none', fontSize: 14, fontWeight: activeTab === tab.id ? 800 : 500, color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)', borderBottom: `3px solid ${activeTab === tab.id ? 'var(--accent)' : 'transparent'}`, transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <tab.icon size={16} /> {tab.label}
              </button>
            ))}
         </div>
 
-        <div className="detail-panel-body" style={{ background: 'var(--bg-base)', padding: 24 }}>
+        <div className="detail-panel-body" style={{ background: 'var(--bg-base)', padding: 32, overflowY: 'auto', flex: 1 }}>
            {activeTab === 'info' && (
-             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
-                <section className="detail-section">
-                   <div className="detail-section-title"><Clock size={14} /> 진행 상황</div>
-                   <div className="card" style={{ padding: 18 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
-                         <span style={{ fontSize: 13, fontWeight: 700 }}>진척도</span>
-                         <span style={{ color: 'var(--accent)', fontWeight: 800 }}>{team.progress_pct}%</span>
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 32 }}>
+                <section>
+                   <div className="detail-section-title" style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}><Clock size={16} /> 프로젝트 진척</div>
+                   <div style={{ background: 'var(--bg-surface)', padding: 24, borderRadius: 20, border: '1px solid var(--border)' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
+                         <span style={{ fontSize: 14, fontWeight: 700 }}>진행률</span>
+                         <span style={{ color: 'var(--accent)', fontWeight: 900, fontSize: 18 }}>{team.progress_pct}%</span>
                       </div>
-                      <div className="progress-bg"><div className="progress-fill" style={{ width: `${team.progress_pct}%`, background: 'var(--accent)' }} /></div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
-                         <span className={`badge ${project ? getStageColorClass(team.stage, project.stages) : ''}`}>{team.stage}</span>
-                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>마감: {project?.end_date || '미정'}</span>
+                      <div className="progress-bg" style={{ height: 8, background: 'var(--bg-hover)', borderRadius: 4 }}><div className="progress-fill" style={{ width: `${team.progress_pct}%`, background: 'var(--accent)', height: '100%', borderRadius: 4 }} /></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 16 }}>
+                         <span className={`badge ${project ? getStageColorClass(team.stage, project.stages) : ''}`} style={{ padding: '6px 12px', fontSize: 12 }}>{team.stage}</span>
+                         <span style={{ fontSize: 12, fontWeight: 600, color: 'var(--text-muted)' }}>D-Day {project?.end_date || '-'}</span>
                       </div>
                    </div>
                 </section>
 
-                <section className="detail-section">
-                   <div className="detail-section-title"><Users size={14} /> 팀원 ({members.length})</div>
-                   <div className="card" style={{ padding: 0 }}>
-                      <table style={{ width: '100%' }}>
-                         <thead>
+                <section>
+                   <div className="detail-section-title" style={{ fontSize: 14, fontWeight: 800, color: 'var(--text-primary)', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 8 }}><Users size={16} /> 팀 구성원 ({members.length})</div>
+                   <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                         <thead style={{ background: 'var(--bg-hover)' }}>
                             <tr>
-                               <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, color: 'var(--text-muted)' }}>수강생</th>
-                               <th style={{ padding: '10px 16px', textAlign: 'left', fontSize: 11, color: 'var(--text-muted)' }}>역할</th>
-                               <th style={{ padding: '10px 16px', textAlign: 'center', fontSize: 11, color: 'var(--text-muted)' }}>팀장</th>
-                               <th style={{ padding: '10px 16px', textAlign: 'right' }}></th>
+                               <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>수강생</th>
+                               <th style={{ padding: '14px 20px', textAlign: 'left', fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>역할</th>
+                               <th style={{ padding: '14px 20px', textAlign: 'center', fontSize: 11, fontWeight: 800, color: 'var(--text-muted)', textTransform: 'uppercase' }}>팀장</th>
+                               <th style={{ padding: '14px 20px' }}></th>
                             </tr>
                          </thead>
                          <tbody>
@@ -240,36 +213,37 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                               const s = students.find(x => x.id === member.student_id);
                               const isLeader = member.student_id === team.leader_id;
                               return s ? (
-                                <tr key={`mem-${member.id}`} style={{ borderBottom: '1px solid var(--border)' }}>
-                                   <td style={{ padding: '12px 16px' }}>
-                                      <div style={{ fontSize: 13, fontWeight: 600 }}>{s.name}</div>
+                                <tr key={`member-row-${member.id}`} style={{ borderBottom: '1px solid var(--border)' }}>
+                                   <td style={{ padding: '16px 20px' }}>
+                                      <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-primary)' }}>{s.name}</div>
                                    </td>
-                                   <td style={{ padding: '12px 16px' }}>
-                                      <input className="form-input" style={{ height: 30, fontSize: 12 }} value={member.role || ''} onChange={e => updateTeamMemberRole(member.id, e.target.value)} placeholder="역할..." />
+                                   <td style={{ padding: '16px 20px' }}>
+                                      <input className="form-input" style={{ height: 32, fontSize: 13, background: 'transparent', border: 'none', padding: 0 }} value={member.role || ''} onChange={e => updateTeamMemberRole(member.id, e.target.value)} placeholder="역할 설정..." />
                                    </td>
-                                   <td style={{ textAlign: 'center', padding: '12px 16px' }}>
+                                   <td style={{ textAlign: 'center', padding: '16px 20px' }}>
                                       <button 
                                          onClick={() => handleSetLeader(s.id)} 
-                                         className={`btn-icon ${isLeader ? 'active' : ''}`} 
+                                         className={`leader-toggle ${isLeader ? 'active' : ''}`}
                                          style={{ 
-                                            background: isLeader ? 'var(--yellow-light)' : 'none',
-                                            color: isLeader ? 'var(--yellow)' : 'var(--border)',
-                                            border: 'none', padding: 6, borderRadius: '50%'
+                                            background: isLeader ? 'var(--yellow)' : 'transparent',
+                                            border: `1.5px solid ${isLeader ? 'var(--yellow)' : 'var(--border)'}`,
+                                            color: isLeader ? 'white' : 'var(--text-muted)',
+                                            width: 32, height: 32, borderRadius: 10, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
                                          }}
                                       >
-                                         <Crown size={18} fill={isLeader ? 'var(--yellow)' : 'none'} />
+                                         <Crown size={16} fill={isLeader ? 'white' : 'none'} />
                                       </button>
                                    </td>
-                                   <td style={{ textAlign: 'right', padding: '12px 16px' }}>
-                                      <button onClick={() => removeTeamMember(member.id)} style={{ color: 'var(--red)', opacity: 0.5 }}><Trash2 size={13} /></button>
+                                   <td style={{ textAlign: 'right', padding: '16px 20px' }}>
+                                      <button onClick={() => removeTeamMember(member.id)} style={{ color: 'var(--red)', opacity: 0.4 }}><Trash2 size={16} /></button>
                                    </td>
                                 </tr>
                               ) : null;
                             })}
                          </tbody>
                       </table>
-                      <button className="add-todo-btn" style={{ padding: '12px 16px', borderTop: '1px solid var(--border)', justifyContent: 'center' }} onClick={() => setShowMemberSelector(true)}>
-                         <Plus size={14} /> 팀원 추가
+                      <button className="add-todo-btn" style={{ padding: '16px', width: '100%', border: 'none', background: 'var(--bg-hover)', color: 'var(--accent)', fontWeight: 700, fontSize: 13, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }} onClick={() => setShowMemberSelector(true)}>
+                         <UserPlus size={16} /> 팀원 추가하기
                       </button>
                    </div>
                 </section>
@@ -277,63 +251,53 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
            )}
 
            {activeTab === 'eval' && (
-             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-                <div className="card" style={{ background: 'linear-gradient(135deg, var(--accent), #4f46e5)', color: 'white', border: 'none', padding: 24, textAlign: 'center', borderRadius: 20 }}>
-                   <div style={{ opacity: 0.9, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>팀 종합 성취도 (v8.11)</div>
-                   <div style={{ fontSize: 48, fontWeight: 900 }}>{overallScore.toFixed(1)}</div>
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <div style={{ background: 'linear-gradient(135deg, #6366f1, #a855f7)', color: 'white', padding: '32px 24px', borderRadius: 24, textAlign: 'center', boxShadow: '0 10px 25px -10px rgba(99, 102, 241, 0.5)' }}>
+                   <div style={{ fontSize: 13, fontWeight: 700, opacity: 0.9, marginBottom: 8, letterSpacing: '0.05em' }}>TEAM PERFORMANCE SCORE (v8.12)</div>
+                   <div style={{ fontSize: 64, fontWeight: 900, lineHeight: 1 }}>{overallScore.toFixed(1)}</div>
                 </div>
-                <div className="card" style={{ padding: '10px 20px' }}>
+                <div className="card" style={{ padding: '8px 24px' }}>
                    {project?.score_categories.map((cat, idx) => (
-                     <div key={`cat-row-${cat.id || idx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px 0', borderBottom: idx === project.score_categories.length - 1 ? 'none' : '1px solid var(--border)' }}>
-                        <span style={{ fontSize: 13, fontWeight: 700 }}>{cat.label}</span>
+                     <div key={`cat-v2-${cat.id || idx}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '20px 0', borderBottom: idx === project.score_categories.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)' }}>{cat.label}</span>
                         <StarRating 
-                           key={`team-star-${team.id}-${cat.id || idx}-${categoryScores[cat.id] || 0}`}
+                           key={`team-star-v12-${team.id}-${cat.id}-${categoryScores[cat.id] || 0}`}
                            value={categoryScores[cat.id] || 0} 
-                           onChange={v => {
-                              console.log(`Setting ${cat.label} (${cat.id}) to ${v}`);
-                              setCategoryScores(prev => ({ ...prev, [cat.id]: v }));
-                           }} 
-                           size={20} 
+                           onChange={v => setCategoryScores(prev => ({ ...prev, [cat.id]: v }))} 
+                           size={22} 
                         />
                      </div>
                    ))}
-                   <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 48, borderRadius: 12 }} onClick={handleSaveScores}>
-                      <Save size={16} /> 팀 점수 저장
+                   <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 52, borderRadius: 16, fontSize: 15, fontWeight: 800, background: 'var(--accent)', color: 'white' }} onClick={handleSaveScores}>
+                      <Save size={18} /> 점수 업데이트
                    </button>
                 </div>
              </div>
            )}
 
            {activeTab === 'logs' && (
-             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                <button className="btn btn-primary" style={{ width: '100%', gap: 6, height: 44, borderRadius: 12 }} onClick={() => { 
-                   setEditingLog(null); 
-                   setLogForm({ 
-                     type: '회의록', date: format(new Date(), 'yyyy-MM-dd'), time: format(new Date(), 'HH:mm'), 
-                     content: '', student_id: -1 
-                   }); 
-                   setShowLogModal(true); 
-                }}>
-                   <Plus size={15} /> 활동 로그 추가
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <button className="btn btn-primary" style={{ height: 48, borderRadius: 16, gap: 10, background: 'var(--accent)', color: 'white', fontWeight: 800 }} onClick={() => { setEditingLog(null); setShowLogModal(true); }}>
+                   <Plus size={18} /> 활동 피드 작성
                 </button>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
-                   {teamTimeline.length === 0 && <div className="empty-state">활동 로그가 없습니다.</div>}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                    {teamTimeline.map(c => (
-                     <div key={`${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: c.isTeam ? '4px solid var(--accent)' : '4px solid #94a3b8' }}>
-                        <div className="consult-meta">
-                           <span className="badge">{c.type}</span>
-                           <span>{formatShortDate(c.date)}</span>
-                           <span style={{ fontWeight: 700 }}>{c.isTeam ? '👥 팀' : `👤 ${students.find(s=>s.id===Number(c.student_id))?.name || '개인'}`}</span>
-                           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                              <button onClick={() => { 
-                                setEditingLog(c); 
-                                setLogForm({ type: c.type, date: c.date.split('T')[0], time: c.date.includes('T') ? c.date.split('T')[1].slice(0, 5) : '00:00', content: c.content, student_id: c.student_id }); 
-                                setShowLogModal(true); 
-                              }}><Edit3 size={12} /></button>
-                              <button onClick={() => { if(confirm('삭제하시겠습니까?')) { if (c.isTeam) deleteProjectLog(c.id); else deleteConsultation(c.id); } }} style={{ color: 'var(--red)' }}><Trash2 size={12} /></button>
+                     <div key={`feed-${c.isTeam ? 't' : 's'}-${c.id}`} style={{ background: 'var(--bg-surface)', padding: 20, borderRadius: 20, border: '1px solid var(--border)', borderLeft: `5px solid ${c.isTeam ? 'var(--accent)' : '#94a3b8'}` }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12, alignItems: 'flex-start' }}>
+                           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span className="badge" style={{ background: 'var(--bg-hover)', color: 'var(--text-primary)', fontWeight: 800 }}>{c.type}</span>
+                              <span style={{ fontSize: 12, color: 'var(--text-muted)', fontWeight: 600 }}>{formatShortDate(c.date)}</span>
+                           </div>
+                           <div style={{ display: 'flex', gap: 6 }}>
+                              <button onClick={() => { setEditingLog(c); setLogForm({ type: c.type, date: c.date.split('T')[0], time: c.date.includes('T') ? c.date.split('T')[1].slice(0, 5) : '00:00', content: c.content, student_id: c.student_id }); setShowLogModal(true); }} style={{ padding: 6, color: 'var(--text-muted)' }}><Edit3 size={14} /></button>
+                              <button onClick={() => { if(confirm('삭제하시겠습니까?')) { if (c.isTeam) deleteProjectLog(c.id); else deleteConsultation(c.id); } }} style={{ padding: 6, color: 'var(--red)', opacity: 0.5 }}><Trash2 size={14} /></button>
                            </div>
                         </div>
-                        <div className="consult-content markdown-body"><ReactMarkdown>{c.content}</ReactMarkdown></div>
+                        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
+                           {c.isTeam ? <Users size={14} /> : <UserCheck size={14} />}
+                           {c.isTeam ? '팀 전체' : students.find(s=>s.id===Number(c.student_id))?.name}
+                        </div>
+                        <div className="markdown-body" style={{ fontSize: 14, lineHeight: 1.6 }}><ReactMarkdown>{c.content}</ReactMarkdown></div>
                      </div>
                    ))}
                 </div>
@@ -342,76 +306,60 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
         </div>
       </div>
 
-      {showMemberSelector && (
-        <div className="modal-overlay" onClick={() => setShowMemberSelector(false)}>
-          <div className="modal card" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
-            <div className="modal-header"><h3 className="modal-title">팀원 추가</h3></div>
-            <div className="modal-body">
-              <input className="form-input" placeholder="이름으로 검색..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)} autoFocus />
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12, maxHeight: 300, overflowY: 'auto' }}>
-                {students.filter(s => s.name.includes(memberSearch) && !members.some(m => m.student_id === s.id)).map(s => (
-                  <div key={s.id} onClick={() => { addTeamMember(team.id, s.id); setShowMemberSelector(false); }} 
-                    style={{ padding: 12, borderRadius: 8, background: 'var(--bg-elevated)', display: 'flex', justifyContent: 'space-between', cursor: 'pointer' }}>
-                    <span style={{ fontSize: 13, fontWeight: 600 }}>{s.name}</span><Plus size={14} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showLogModal && (
         <div className="modal-overlay" onClick={() => setShowLogModal(false)}>
-           <div className="modal card" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
-              <div className="modal-header"><h3 className="modal-title">{editingLog ? '기록 수정' : '활동 로그 추가'}</h3></div>
-              <div className="modal-body">
+           <div className="modal card" style={{ maxWidth: 460, padding: 32, borderRadius: 24 }} onClick={e => e.stopPropagation()}>
+              <div className="modal-header" style={{ marginBottom: 24 }}><h3 className="modal-title" style={{ fontSize: 20, fontWeight: 800 }}>{editingLog ? '기록 수정' : '새로운 활동 기록'}</h3></div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
                  <div className="form-field">
-                    <label className="form-label">기록 대상</label>
-                    <select className="form-select" value={logForm.student_id} onChange={e => setLogForm(f => ({ ...f, student_id: Number(e.target.value) }))}>
-                       <option value={-1}>팀 전체</option>
-                       {members.map((m, idx) => {
+                    <label className="form-label" style={{ fontWeight: 800, fontSize: 12, marginBottom: 8, display: 'block' }}>대상 선택</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                       <button onClick={() => setLogForm(f => ({ ...f, student_id: -1 }))} style={{ padding: '10px 16px', borderRadius: 12, border: `2px solid ${Number(logForm.student_id) === -1 ? 'var(--accent)' : 'var(--border)'}`, background: Number(logForm.student_id) === -1 ? 'var(--accent)' : 'transparent', color: Number(logForm.student_id) === -1 ? 'white' : 'var(--text-secondary)', fontWeight: 700, fontSize: 13, transition: 'all 0.2s' }}>팀 전체</button>
+                       {members.map(m => {
                          const s = students.find(std => std.id === m.student_id);
-                         return s ? <option key={`opt-${m.id}-${idx}`} value={s.id}>{s.name} (개인)</option> : null;
+                         if (!s) return null;
+                         const active = Number(logForm.student_id) === s.id;
+                         return <button key={`sel-${s.id}`} onClick={() => setLogForm(f => ({ ...f, student_id: s.id }))} style={{ padding: '10px 16px', borderRadius: 12, border: `2px solid ${active ? 'var(--accent)' : 'var(--border)'}`, background: active ? 'var(--accent)' : 'transparent', color: active ? 'white' : 'var(--text-secondary)', fontWeight: 700, fontSize: 13, transition: 'all 0.2s' }}>{s.name}</button>;
                        })}
-                    </select>
-                 </div>
-                 <div className="form-field">
-                    <label className="form-label">내용</label>
-                    <textarea className="form-input" rows={6} value={logForm.content} onChange={e => setLogForm(f => ({ ...f, content: e.target.value }))} />
-                 </div>
-                 <div className="form-row">
-                    <div className="form-field">
-                       <label className="form-label">날짜</label>
-                       <input type="date" className="form-input" value={logForm.date} onChange={e => setLogForm(f => ({ ...f, date: e.target.value }))} />
-                    </div>
-                    <div className="form-field">
-                       <label className="form-label">시간</label>
-                       <input type="time" className="form-input" value={logForm.time} onChange={e => setLogForm(f => ({ ...f, time: e.target.value }))} />
                     </div>
                  </div>
                  <div className="form-field">
-                    <label className="form-label">유형</label>
-                    <select className="form-select" value={logForm.type} onChange={e => setLogForm(f => ({ ...f, type: e.target.value as any }))}>
+                    <label className="form-label" style={{ fontWeight: 800, fontSize: 12, marginBottom: 8, display: 'block' }}>내용 작성</label>
+                    <textarea className="form-input" rows={6} value={logForm.content} onChange={e => setLogForm(f => ({ ...f, content: e.target.value }))} style={{ borderRadius: 16, padding: 16 }} placeholder="오늘의 활동 내용을 상세히 적어주세요..." />
+                 </div>
+                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                    <div className="form-field">
+                       <label className="form-label" style={{ fontWeight: 800, fontSize: 12, marginBottom: 8, display: 'block' }}>날짜</label>
+                       <input type="date" className="form-input" value={logForm.date} onChange={e => setLogForm(f => ({ ...f, date: e.target.value }))} style={{ borderRadius: 12 }} />
+                    </div>
+                    <div className="form-field">
+                       <label className="form-label" style={{ fontWeight: 800, fontSize: 12, marginBottom: 8, display: 'block' }}>시간</label>
+                       <input type="time" className="form-input" value={logForm.time} onChange={e => setLogForm(f => ({ ...f, time: e.target.value }))} style={{ borderRadius: 12 }} />
+                    </div>
+                 </div>
+                 <div className="form-field">
+                    <label className="form-label" style={{ fontWeight: 800, fontSize: 12, marginBottom: 8, display: 'block' }}>로그 유형</label>
+                    <select className="form-select" value={logForm.type} onChange={e => setLogForm(f => ({ ...f, type: e.target.value as any }))} style={{ borderRadius: 12, padding: '0 12px' }}>
                        {Number(logForm.student_id) === -1 ? (
                          <>
-                           <option value="회의록">회의록</option>
-                           <option value="멘토피드백">멘토피드백</option>
-                           <option value="진행보고">진행보고</option>
+                           <option value="회의록">👥 회의록</option>
+                           <option value="멘토피드백">💡 멘토 피드백</option>
+                           <option value="진행보고">📋 진행 보고</option>
                          </>
                        ) : (
                          <>
-                           <option value="학습점검">개발로그</option>
-                           <option value="개인상담">피드백</option>
-                           <option value="기타">기타</option>
+                           <option value="개인상담">💬 개인 피드백</option>
+                           <option value="학습점검">✍️ 개발 로그</option>
+                           <option value="전화상담">📞 개별 연락</option>
+                           <option value="기타">🔗 기타</option>
                          </>
                        )}
                     </select>
                  </div>
               </div>
-              <div className="modal-footer">
-                 <button className="btn btn-secondary" onClick={() => setShowLogModal(false)}>취소</button>
-                 <button className="btn btn-primary" onClick={handleLogSubmit}>저장</button>
+              <div className="modal-footer" style={{ marginTop: 32, gap: 12 }}>
+                 <button className="btn btn-secondary" onClick={() => setShowLogModal(false)} style={{ flex: 1, height: 48, borderRadius: 14 }}>취소</button>
+                 <button className="btn btn-primary" onClick={handleLogSubmit} style={{ flex: 2, height: 48, borderRadius: 14, background: 'var(--accent)', color: 'white', fontWeight: 800 }}>활동 저장하기</button>
               </div>
            </div>
         </div>
