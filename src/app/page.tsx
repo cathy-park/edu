@@ -29,7 +29,6 @@ export default function DashboardPage() {
   const [editCohortName, setEditCohortName] = useState('');
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   
-  // v8.36: Restore Instructor Name Edit
   const [instructorName, setInstructorName] = useState('김강사');
   const [isEditingName, setIsEditingName] = useState(false);
   const [tempName, setTempName] = useState('김강사');
@@ -135,11 +134,11 @@ export default function DashboardPage() {
              ) : (
                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                  {greeting}, {instructorName}님 👋
-                 <button className="btn-icon-hover" onClick={() => setIsEditingName(true)} style={{ marginLeft: 4, background: 'none', border: 'none', cursor: 'pointer', opacity: 0.3 }}><Pencil size={14} /></button>
+                 <button className="btn-icon-hover" onClick={() => setIsEditingName(true)} style={{ marginLeft: 4, background: 'none', border: 'none', cursor: 'pointer' }}><Pencil size={14} color="#BFC4CD" /></button>
                </div>
              )}
            </div>
-           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — <span style={{color:'var(--accent)', fontWeight:900}}>v8.36 Identity Fix</span></div>
+           <div style={{ marginTop: 4, fontSize: 13, color: 'var(--text-muted)' }}>{format(today, 'yyyy년 M월 d일 (eee)', { locale: ko })} — 오늘의 현황입니다.</div>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
            {showAddCohort ? (
