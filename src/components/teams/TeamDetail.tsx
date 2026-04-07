@@ -5,7 +5,7 @@ import {
   X, Users, BookOpen, Clock, ChevronRight, 
   Save, Trash2, UserPlus, Star, Search, 
   Check, Plus, Link as LinkIcon, MessageSquare, 
-  Edit3, Calendar, Minus, StickyNote, Crown
+  Edit3, Calendar, Minus, StickyNote, Crown, Award
 } from 'lucide-react';
 import { Team, Student, Project, TeamMember, Consultation, ConsultationType } from '@/lib/types';
 import { StarRating } from '@/components/common/StarRating';
