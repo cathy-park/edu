@@ -1,58 +1,55 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
-
-type UserSession = 'guest' | { email: string; name: string } | null;
+import { supabase } from '@/lib/supabase';
+import { User } from '@supabase/supabase-js';
 
 interface AuthContextType {
-  user: UserSession;
+  user: User | null;
   isLoading: boolean;
-  loginAsGuest: () => void;
-  mockLoginWithGoogle: () => void;
-  logout: () => void;
+  loginWithGoogle: () => Promise<void>;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<UserSession>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Check for existing session in localStorage
-    const savedSession = localStorage.getItem('edu_auth_session');
-    if (savedSession) {
-      try {
-        setUser(JSON.parse(savedSession));
-      } catch {
-        setUser(null);
-      }
-    }
-    setIsLoading(false);
+    // Get initial session
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    // Listen for auth changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      setIsLoading(false);
+    });
+
+    return () => subscription.unsubscribe();
   }, []);
 
-  const loginAsGuest = () => {
-    const session: UserSession = 'guest';
-    setUser(session);
-    localStorage.setItem('edu_auth_session', JSON.stringify(session));
+  const loginWithGoogle = async () => {
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: window.location.origin,
+      },
+    });
+    if (error) throw error;
   };
 
-  const mockLoginWithGoogle = () => {
-    const session: UserSession = { 
-      email: 'admin@edu-manager.com', 
-      name: '관리자' 
-    };
-    setUser(session);
-    localStorage.setItem('edu_auth_session', JSON.stringify(session));
-  };
-
-  const logout = () => {
-    setUser(null);
-    localStorage.removeItem('edu_auth_session');
+  const logout = async () => {
+    const { error } = await supabase.auth.signOut();
+    if (error) throw error;
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, loginAsGuest, mockLoginWithGoogle, logout }}>
+    <AuthContext.Provider value={{ user, isLoading, loginWithGoogle, logout }}>
       {children}
     </AuthContext.Provider>
   );
