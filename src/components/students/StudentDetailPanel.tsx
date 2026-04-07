@@ -12,6 +12,7 @@ import toast from 'react-hot-toast';
 import { useData } from '@/context/DataContext';
 import ReactMarkdown from 'react-markdown';
 import ConsultationModal from '../common/ConsultationModal';
+import { format, parseISO } from 'date-fns';
 
 interface Props {
   student: Student;
@@ -36,6 +37,7 @@ export default function StudentDetailPanel({
 }: Props) {
   const { 
     projects, students, teamMembers, tags: allTags, consultations: allConsultations,
+    projectLogs,
     addConsultation, updateConsultation, deleteConsultation,
     updateProjectScore 
   } = useData();
@@ -52,10 +54,21 @@ export default function StudentDetailPanel({
     [allTags, currentStudentId]
   );
 
-  const studentConsultations = useMemo(() => 
-    allConsultations.filter(c => c.student_id === currentStudentId),
-    [allConsultations, currentStudentId]
-  );
+  // MERGED TIMELINE (Individual + Team Logs)
+  const studentTimeline = useMemo(() => {
+    // 1. Individual consultations
+    const individual = allConsultations
+      .filter(c => c.student_id === currentStudentId)
+      .map(c => ({ ...c, isTeam: false, date: c.consulted_at }));
+    
+    // 2. Team logs for teams this student is in
+    const myTeams = teamMembers.filter(tm => tm.student_id === currentStudentId).map(tm => tm.team_id);
+    const team = projectLogs
+      .filter(pl => myTeams.includes(pl.team_id))
+      .map(pl => ({ ...pl, isTeam: true, date: pl.log_date, student_id: currentStudentId, consulted_at: pl.log_date }));
+    
+    return [...individual, ...team].sort((a, b) => b.date.localeCompare(a.date));
+  }, [allConsultations, projectLogs, teamMembers, currentStudentId]);
 
   const [activeTab, setActiveTab] = useState<'info' | 'projects' | 'consultations'>(initialTab);
   const [consFilter, setConsFilter] = useState<ConsultationType>('전체');
@@ -128,11 +141,11 @@ export default function StudentDetailPanel({
     setShowNoteModal(false);
   };
 
-  const filteredConsultations = useMemo(() => {
-    return (studentConsultations || []).filter((c: Consultation) => 
+  const filteredTimeline = useMemo(() => {
+    return studentTimeline.filter((c: any) => 
       consFilter === '전체' || c.type === consFilter
-    ).sort((a, b) => b.consulted_at.localeCompare(a.consulted_at));
-  }, [studentConsultations, consFilter]);
+    );
+  }, [studentTimeline, consFilter]);
 
   const participatedProjects = useMemo(() => {
     const memberships = teamMembers.filter(tm => tm.student_id === student.id);
@@ -160,8 +173,13 @@ export default function StudentDetailPanel({
 
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return `${d.getMonth() + 1}/${d.getDate()} ${dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : ''}`;
+    try {
+      const d = parseISO(dateStr);
+      return format(d, 'MM-dd HH:mm');
+    } catch (e) {
+      const d = new Date(dateStr);
+      return isNaN(d.getTime()) ? dateStr : format(d, 'MM-dd HH:mm');
+    }
   };
 
   return (
@@ -201,7 +219,7 @@ export default function StudentDetailPanel({
                   flex: 1, padding: '16px 0', border: 'none', background: 'none', 
                   fontSize: 13.5, fontWeight: activeTab === tab.id ? 700 : 500, 
                   color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)',
-                  borderBottom: `2px solid ${activeTab === tab.id ? 'var(--accent)' : 'transparent'}`,
+                  borderBottom: `2.5px solid ${activeTab === tab.id ? 'var(--accent)' : 'transparent'}`,
                   transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
                 }}>
                 <tab.icon size={16} /> {tab.label}
@@ -288,24 +306,27 @@ export default function StudentDetailPanel({
            {activeTab === 'consultations' && (
              <div style={{ animation: 'fadeIn 0.2s' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-                   <div className="detail-section-title">상담 이력</div>
+                   <div className="detail-section-title">상담 및 활동 이력</div>
                    <button className="btn btn-primary btn-sm" onClick={() => handleOpenConsModal()} style={{ borderRadius: 8, padding: '4px 12px' }}><Plus size={14} /> 추가</button>
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                   {filteredConsultations.map(c => (
-                     <div key={c.id} className="consult-item">
+                   {filteredTimeline.map(c => (
+                     <div key={`${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: c.isTeam ? '4px solid var(--accent)' : 'none' }}>
                         <div className="consult-meta">
-                           <span className={`badge log-type-${c.type}`}>{c.type}</span>
-                           <span>{formatShortDate(c.consulted_at)}</span>
-                           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
-                              <button onClick={() => handleOpenConsModal(c)}><Edit3 size={12} /></button>
-                              <button onClick={() => deleteConsultation(c.id)} style={{ color: 'var(--red)' }}><Trash2 size={12} /></button>
-                           </div>
+                           <span className={`badge ${c.isTeam ? 'log-type-회의록' : `log-type-${c.type}`}`}>{c.type}</span>
+                           <span>{formatShortDate(c.date)}</span>
+                           <span style={{ fontWeight: 700 }}>{c.isTeam ? '👥 팀 전체' : '👤 개인'}</span>
+                           {!c.isTeam && (
+                             <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                                <button onClick={() => handleOpenConsModal(c as any)}><Edit3 size={12} /></button>
+                                <button onClick={() => deleteConsultation(c.id)} style={{ color: 'var(--red)' }}><Trash2 size={12} /></button>
+                             </div>
+                           )}
                         </div>
                         <div className="consult-content markdown-body"><ReactMarkdown>{c.content}</ReactMarkdown></div>
                      </div>
                    ))}
-                   {filteredConsultations.length === 0 && <div className="empty-state">기록된 상담이 없습니다.</div>}
+                   {filteredTimeline.length === 0 && <div className="empty-state">기록된 이력이 없습니다.</div>}
                 </div>
              </div>
            )}
@@ -319,7 +340,7 @@ export default function StudentDetailPanel({
            <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
               <div className="modal-header"><h3 className="modal-title">메모 수정</h3></div>
               <div className="modal-body">
-                 <textarea className="form-input" rows={6} value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="내용을 입력하세요..." />
+                 <textarea className="form-input" rows={6} value={noteText} onChange={setNoteText} placeholder="내용을 입력하세요..." />
               </div>
               <div className="modal-footer">
                  <button className="btn btn-secondary" onClick={() => setShowNoteModal(false)}>취소</button>

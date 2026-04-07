@@ -13,7 +13,7 @@ import { useData } from '@/context/DataContext';
 import toast from 'react-hot-toast';
 import ReactMarkdown from 'react-markdown';
 import { getStageColorClass } from '@/lib/utils';
-import { format } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
 interface Props {
   team: Team;
@@ -54,16 +54,26 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   const [categoryScores, setCategoryScores] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    // Initial category scores from project if needed, but usually we fetch from team grade
-    // For simplicity, we start fresh or from existing context
-     setCategoryScores({});
-  }, [team.id]);
+    // Attempt to load existing scores from the first member's project_scores
+    if (members.length > 0) {
+      const firstMember = students.find(s => s.id === members[0].student_id);
+      if (firstMember) {
+        const existingScore = firstMember.project_scores.find(ps => ps.project_id === team.project_id);
+        if (existingScore) {
+          setCategoryScores(existingScore.category_scores || {});
+        } else {
+          setCategoryScores({});
+        }
+      }
+    }
+  }, [team.id, team.project_id, members.length]);
 
   const overallScore = useMemo(() => {
     const cats = Object.values(categoryScores);
     if (cats.length === 0) return 0;
-    const avg = cats.reduce((a, b) => a + b, 0) / cats.length;
-    return Math.round(avg * 2) / 2;
+    const total = cats.reduce((a, b) => a + b, 0);
+    const avg = total / cats.length;
+    return Math.round(avg * 10) / 10;
   }, [categoryScores]);
 
   const handleSaveInfo = () => {
@@ -74,6 +84,11 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   const handleSaveScores = async () => {
     await updateTeamProjectScore(team.id, team.project_id, categoryScores, overallScore);
     toast.success('팀 성취도가 저장되었습니다');
+  };
+
+  const handleSetLeader = (studentId: number) => {
+    updateTeam(team.id, { leader_id: studentId });
+    toast.success('팀장이 변경되었습니다');
   };
 
   const handleLogSubmit = async () => {
@@ -135,8 +150,13 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
-    const d = new Date(dateStr);
-    return format(d, 'MM-dd HH:mm');
+    try {
+      const d = parseISO(dateStr);
+      return format(d, 'MM-dd HH:mm');
+    } catch (e) {
+      const d = new Date(dateStr);
+      return isNaN(d.getTime()) ? dateStr : format(d, 'MM-dd HH:mm');
+    }
   };
 
   return (
@@ -206,11 +226,15 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                          <tbody>
                             {members.map(member => {
                               const s = students.find(x => x.id === member.student_id);
+                              const isLeader = member.student_id === team.leader_id;
                               return s ? (
                                 <tr key={member.id} style={{ borderBottom: '1px solid var(--border)' }}>
                                    <td style={{ padding: '12px 16px' }}>
                                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
-                                         {s.name} {member.student_id === team.leader_id && <Crown size={12} color="var(--yellow)" />}
+                                         {s.name} {isLeader && <Crown size={12} color="var(--yellow)" />}
+                                         {!isLeader && (
+                                           <button onClick={() => handleSetLeader(s.id)} className="btn-ghost" style={{ padding: 2 }} title="팀장 지정"><Crown size={11} color="var(--text-muted)" /></button>
+                                         )}
                                       </div>
                                    </td>
                                    <td style={{ padding: '12px 16px' }}>
@@ -240,10 +264,10 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                 </div>
                 <div className="card">
                    {project?.score_categories.map(cat => (
-                     <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
+                     <div key={`cat-row-${cat.id}`} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
                         <span style={{ fontSize: 13, fontWeight: 700 }}>{cat.label}</span>
                         <StarRating 
-                           key={`team-${cat.id}-${categoryScores[cat.id] || 0}`}
+                           key={`team-star-${cat.id}-${categoryScores[cat.id] || 0}`}
                            value={categoryScores[cat.id] || 0} 
                            onChange={v => setCategoryScores(prev => ({ ...prev, [cat.id]: v }))} 
                            size={20} 
@@ -275,7 +299,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                         <div className="consult-meta">
                            <span className="badge">{c.type}</span>
                            <span>{formatShortDate(c.date)}</span>
-                           <span>{c.isTeam ? '👥 팀' : '👤 개인'}</span>
+                           <span>{c.isTeam ? '👥 팀' : `👤 ${students.find(s=>s.id===c.student_id)?.name || '개인'}`}</span>
                            <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
                               <button onClick={() => { 
                                 setEditingLog(c); 
@@ -322,9 +346,9 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                     <label className="form-label">기록 대상</label>
                     <select className="form-select" value={logForm.student_id} onChange={e => setLogForm(f => ({ ...f, student_id: Number(e.target.value) }))}>
                        <option value={-1}>팀 전체</option>
-                       {members.map(m => {
+                       {members.map((m, idx) => {
                          const s = students.find(std => std.id === m.student_id);
-                         return s ? <option key={m.id} value={s.id}>{s.name} (개인)</option> : null;
+                         return s ? <option key={`opt-${m.id}-${idx}`} value={s.id}>{s.name} (개인)</option> : null;
                        })}
                     </select>
                  </div>
