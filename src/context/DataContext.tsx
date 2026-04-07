@@ -1,7 +1,7 @@
 'use client';
 
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { supabase } from '@/lib/supabase';
+import { supabase, isSupabaseConfigured } from '@/lib/supabase';
 import { 
   Student, Project, Team, Consultation, ProjectScore, 
   TeamMember, StudentTag, WorkTask, Todo, Schedule 
@@ -143,6 +143,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (!isSupabaseConfigured) {
+      toast.error('Supabase 연동 설정이 되어 있지 않습니다. .env.local 파일을 확인해주세요.', { duration: 10000 });
+    }
     fetchData();
   }, [fetchData]);
 
@@ -187,7 +190,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       console.error('Insert student error detail:', error.message, error.details, error.hint);
       toast.error(`수강생 추가 실패: ${error.message}`);
       return undefined;
-    } else if (data) {
+    } else if (!data) {
+      console.error('Insert student returned no data (check RLS policies)');
+      toast.error('데이터베이스 저장에 실패했습니다. (권한 확인 필요)');
+      return undefined;
+    } else {
       const newStudent = { ...data, project_scores: data.grades || [] };
       setStudents(prev => [newStudent, ...prev]);
       toast.success('수강생이 추가되었습니다');
@@ -463,9 +470,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addWorkTask = async (task: Omit<WorkTask, 'id' | 'created_at'>) => {
     const { data, error } = await supabase.from('work_tasks').insert([task]).select().single();
     if (error) {
-      toast.error('업무 추가 실패');
-    } else if (data) {
+      console.error('Work task insert error:', error.message, error.details);
+      toast.error(`업무 추가 실패: ${error.message}`);
+    } else if (!data) {
+      console.error('Work task insert returned no data');
+      toast.error('업무 저장에 실패했습니다.');
+    } else {
       setWorkTasks(prev => [data, ...prev]);
+      toast.success('업무가 추가되었습니다.');
     }
   };
 
@@ -491,9 +503,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addSchedule = async (s: Omit<Schedule, 'id' | 'created_at'>) => {
     const { data, error } = await supabase.from('schedules').insert([s]).select().single();
     if (error) {
-      toast.error('일정 추가 실패');
-    } else if (data) {
+      console.error('Schedule insert error:', error.message, error.details);
+      toast.error(`일정 추가 실패: ${error.message}`);
+    } else if (!data) {
+      console.error('Schedule insert returned no data');
+      toast.error('일정 저장에 실패했습니다.');
+    } else {
       setSchedules(prev => [...prev, data]);
+      toast.success('일정이 추가되었습니다.');
     }
   };
 
@@ -519,9 +536,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const addTodo = async (todo: Omit<Todo, 'id' | 'created_at' | 'is_done'>) => {
     const { data, error } = await supabase.from('todos').insert([{ ...todo, is_done: false }]).select().single();
     if (error) {
-      toast.error('할 일 추가 실패');
-    } else if (data) {
+      console.error('Todo insert error:', error.message, error.details);
+      toast.error(`할 일 추가 실패: ${error.message}`);
+    } else if (!data) {
+      console.error('Todo insert returned no data');
+      toast.error('할 일 저장에 실패했습니다.');
+    } else {
       setTodos(prev => [data, ...prev]);
+      toast.success('할 일이 추가되었습니다.');
     }
   };
 
