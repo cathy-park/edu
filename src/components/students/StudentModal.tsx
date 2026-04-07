@@ -64,12 +64,15 @@ export default function StudentModal({ student, onClose, onSave }: Props) {
   const handleSave = () => {
     if (!form.name.trim()) { toast.error('이름을 입력해주세요'); return; }
     
+    const cohortIdParsed = parseInt(form.cohort_id);
+    const finalCohortId = isNaN(cohortIdParsed) ? null : cohortIdParsed;
+
     onSave({
-      name: form.name,
+      name: form.name.trim(),
       age: form.age ? parseInt(form.age) : undefined,
-      phone: form.phone,
-      email: form.email,
-      cohort_id: parseInt(form.cohort_id),
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      cohort_id: finalCohortId,
       status: form.status,
       note: form.note,
       inputTags: tags,

@@ -22,7 +22,7 @@ interface DataContextType {
   isLoading: boolean;
   
   // Student CRUD
-  addStudent: (s: Omit<Student, 'id' | 'created_at' | 'project_scores' | 'gpa' | 'attendance_rate'>) => Promise<number | undefined>;
+  addStudent: (s: Omit<Student, 'id' | 'created_at' | 'project_scores'>) => Promise<number | undefined>;
   updateStudent: (id: number, data: Partial<Student>) => Promise<void>;
   deleteStudent: (id: number) => Promise<void>;
   
@@ -158,17 +158,22 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 
   // --- CRUD FUNCTIONS (Updated to call Supabase) ---
 
-  const addStudent = async (s: Omit<Student, 'id' | 'created_at' | 'project_scores' | 'gpa' | 'attendance_rate'>) => {
+  const addStudent = async (s: Omit<Student, 'id' | 'created_at' | 'project_scores'>) => {
+    // Explicitly handle invalid cohort_id (NaN prevention)
+    const cohortId = (s.cohort_id === undefined || isNaN(Number(s.cohort_id))) ? null : Number(s.cohort_id);
+
     // Explicitly pick only the columns that exist in the DB
     const insertData = {
       name: s.name,
       age: s.age,
       phone: s.phone,
       email: s.email,
-      cohort_id: s.cohort_id,
+      cohort_id: cohortId,
       status: s.status,
       profile_image_url: s.profile_image_url,
       joined_at: s.joined_at,
+      gpa: s.gpa || 0,
+      attendance_rate: s.attendance_rate || 0,
       note: s.note
     };
 
@@ -179,8 +184,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       .single();
 
     if (error) {
-      console.error('Insert student error:', error);
-      toast.error('수강생 추가에 실패했습니다');
+      console.error('Insert student error detail:', error.message, error.details, error.hint);
+      toast.error(`수강생 추가 실패: ${error.message}`);
       return undefined;
     } else if (data) {
       const newStudent = { ...data, project_scores: data.grades || [] };
