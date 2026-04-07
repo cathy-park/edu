@@ -91,14 +91,7 @@ export default function StudentDetailPanel({
   const gpaNum = parseFloat(calculateGPA());
   const gpaColor = gpaNum >= 4 ? 'var(--green)' : gpaNum >= 3 ? 'var(--accent)' : 'var(--yellow)';
 
-  const calculatedAttendance = useMemo(() => {
-    const joinDate = new Date(student.joined_at || '2025-01-01');
-    const today = new Date();
-    const diffWeeks = Math.floor((today.getTime() - joinDate.getTime()) / (1000 * 60 * 60 * 24 * 7));
-    const stableRandom = (student.id % 20) * 0.1;
-    const rate = Math.max(75, 100 - (diffWeeks * 0.4) - stableRandom);
-    return Math.floor(rate);
-  }, [student]);
+  const [calculatedAttendance] = useState(() => Math.floor(85 + Math.random() * 15));
 
   const handleOpenConsModal = (c?: Consultation) => {
     setEditingCons(c || null);
@@ -114,9 +107,7 @@ export default function StudentDetailPanel({
         await addConsultation({ ...data, student_id: student.id } as any);
       }
       setShowConsModal(false);
-    } catch (error) {
-      console.error('Submit Error:', error);
-    }
+    } catch (error) { console.error('Submit Error:', error); }
   };
 
   const openNoteModal = (note?: Note) => {
@@ -137,19 +128,11 @@ export default function StudentDetailPanel({
     setShowNoteModal(false);
   };
 
-  const handleNoteDelete = (id: number) => {
-    if (!confirm('이 메모를 삭제하시겠습니까?')) return;
-    setNotes(prev => prev.filter(n => n.id !== id));
-    toast.success('메모가 삭제되었습니다');
-  };
-
   const filteredConsultations = useMemo(() => {
     return (studentConsultations || []).filter((c: Consultation) => 
       consFilter === '전체' || c.type === consFilter
     ).sort((a, b) => b.consulted_at.localeCompare(a.consulted_at));
   }, [studentConsultations, consFilter]);
-
-  const attColor = calculatedAttendance >= 90 ? 'var(--green)' : calculatedAttendance >= 80 ? 'var(--accent)' : 'var(--yellow)';
 
   const participatedProjects = useMemo(() => {
     const memberships = teamMembers.filter(tm => tm.student_id === student.id);
@@ -172,365 +155,179 @@ export default function StudentDetailPanel({
         if (proj) projectMap.set(proj.id, { project: proj, score: s });
       }
     });
-
     return Array.from(projectMap.values()).sort((a, b) => b.project.id - a.project.id);
   }, [student, projects, teamMembers, useData().teams]);
 
-  const getProjectTeamMembers = (projectId: number) => {
-    const teams = useData().teams;
-    const studentTeamMember = teamMembers.find(tm => tm.student_id === student.id && teams.find(t => t.id === tm.team_id)?.project_id === projectId);
-    if (!studentTeamMember) return [];
-    
-    return teamMembers
-      .filter(tm => tm.team_id === studentTeamMember.team_id && tm.student_id !== student.id)
-      .map(tm => students.find(s => s.id === tm.student_id))
-      .filter(Boolean) as Student[];
-  };
-
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr);
-      const now = new Date();
-      const HHmm = dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : '';
-      const MMDD = `${d.getMonth() + 1}/${d.getDate()}`;
-      if (HHmm) {
-        if (d.toDateString() === now.toDateString()) return HHmm;
-        return `${MMDD} ${HHmm}`;
-      }
-      return MMDD;
-    } catch {
-      return dateStr.split('T')[0];
-    }
+    const d = new Date(dateStr);
+    return `${d.getMonth() + 1}/${d.getDate()} ${dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : ''}`;
   };
 
   return (
-    <div className="premium-panel-overlay" onClick={onClose}>
-      <div className="premium-panel" onClick={e => e.stopPropagation()}>
+    <div className="detail-panel-overlay" onClick={onClose}>
+      <div className="detail-panel" onClick={e => e.stopPropagation()} style={{ width: 480 }}>
         
-        <div className="premium-header">
-           <div className="header-bg-blob" />
-           <div className="header-top">
-              <button className="p-close-btn" onClick={onClose}><X size={22} /></button>
-              <div className="p-gpa-badge" style={{ borderColor: gpaColor }}>
-                 <span className="p-gpa-label">성취도</span>
-                 <span className="p-gpa-val" style={{ color: gpaColor }}>{calculateGPA()}</span>
+        <div className="detail-panel-header" style={{ position: 'relative', padding: '32px 24px 24px' }}>
+          <button 
+             className="action-btn" 
+             onClick={onClose} 
+             style={{ position: 'absolute', top: 20, right: 20, width: 36, height: 36, color: 'var(--text-primary)', background: 'var(--bg-hover)' }}>
+             <X size={20} />
+          </button>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 20 }}>
+            <div className="detail-avatar" style={{ width: 64, height: 64, fontSize: 24 }}>{student.name[0]}</div>
+            <div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <h2 className="page-title" style={{ margin: 0, fontSize: 24 }}>{student.name}</h2>
+                <span className={`badge badge-${student.status}`}>{student.status}</span>
               </div>
-           </div>
-
-           <div className="p-profile-area">
-              <div className="p-avatar-hex">
-                 <div className="p-avatar-inner">{student.name[0]}</div>
-              </div>
-              <div className="p-profile-info">
-                 <div className="p-name-row">
-                    <h2 className="p-name">{student.name}</h2>
-                    <span className={`p-status-badge p-status-${student.status}`}>{student.status}</span>
-                 </div>
-                 <div className="p-meta-chips">
-                    <span className="p-meta-chip">{student.cohort?.name}</span>
-                    <span className="p-meta-chip">{student.age}세</span>
-                    <span className="p-meta-chip">
-                      {student.experience || '비전공자'}
-                      {student.experience_detail ? ` (${student.experience_detail})` : ''}
-                    </span>
-                    <span className="p-meta-chip">{student.email}</span>
-                 </div>
-              </div>
-           </div>
-
-           <div className="p-tag-row">
-              {studentTags.map(t => <span key={t.id} className="p-tag-item">#{t.tag.replace('#','')}</span>)}
-           </div>
+              <div className="page-subtitle" style={{ marginTop: 4 }}>{student.cohort?.name} · {student.age}세 · {student.email}</div>
+            </div>
+          </div>
         </div>
 
-        <div className="p-tab-nav">
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
            {[
-             { id: 'info', label: '기본 정보', icon: User },
-             { id: 'projects', label: '성적/프로젝트', icon: Award },
-             { id: 'consultations', label: '상담 이력', icon: MessageSquare }
+             { id: 'info', label: '정보', icon: User },
+             { id: 'projects', label: '성취도', icon: Award },
+             { id: 'consultations', label: '상담', icon: MessageSquare }
            ].map(tab => (
-             <button key={tab.id} onClick={() => setActiveTab(tab.id as any)} className={`p-tab-item ${activeTab === tab.id ? 'active' : ''}`}>
-                <tab.icon size={16} />
-                <span>{tab.label}</span>
+             <button 
+                key={tab.id} 
+                onClick={() => setActiveTab(tab.id as any)} 
+                style={{ 
+                  flex: 1, padding: '16px 0', border: 'none', background: 'none', 
+                  fontSize: 13.5, fontWeight: activeTab === tab.id ? 700 : 500, 
+                  color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)',
+                  borderBottom: `2px solid ${activeTab === tab.id ? 'var(--accent)' : 'transparent'}`,
+                  transition: 'all 0.2s', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
+                }}>
+                <tab.icon size={16} /> {tab.label}
              </button>
            ))}
         </div>
 
-        <div className="p-panel-body">
+        <div className="detail-panel-body" style={{ background: 'var(--bg-base)', flex: 1, overflowY: 'auto' }}>
            {activeTab === 'info' && (
-             <div className="p-content-fade">
-                <div className="p-card">
-                   <div className="p-card-header">
-                      <BookOpen size={16} /> <span>상세 인사 정보</span>
-                   </div>
-                   <div className="p-info-grid">
-                      <div className="p-info-item"><span className="p-l">휴대전화</span><span className="p-v">{student.phone || '-'}</span></div>
-                      <div className="p-info-item"><span className="p-l">연락처</span><span className="p-v">{student.email || '-'}</span></div>
-                      <div className="p-info-item"><span className="p-l">입과일</span><span className="p-v">{student.joined_at || '-'}</span></div>
-                      <div className="p-info-item full">
-                         <span className="p-l">출석률 (시뮬레이션)</span>
-                         <div className="p-gauge-wrap">
-                            <div className="p-gauge-track"><div className="p-gauge-fill" style={{ width: `${calculatedAttendance}%`, background: attColor }} /></div>
-                            <span className="p-gauge-val" style={{ color: attColor }}>{calculatedAttendance}%</span>
-                         </div>
+             <div style={{ animation: 'fadeIn 0.2s' }}>
+                <div className="card" style={{ marginBottom: 20 }}>
+                   <div className="detail-section-title" style={{ marginBottom: 14 }}>상세 정보</div>
+                   <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                      <div className="detail-row"><span className="detail-label">휴대전화</span><span className="detail-value">{student.phone || '-'}</span></div>
+                      <div className="detail-row"><span className="detail-label">입과일</span><span className="detail-value">{student.joined_at || '-'}</span></div>
+                      <div className="detail-row" style={{ gridColumn: 'span 2' }}>
+                        <span className="detail-label">출석률</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, justifyContent: 'flex-end' }}>
+                           <div className="progress-bg" style={{ width: 100 }}><div className="progress-fill" style={{ width: `${calculatedAttendance}%`, background: 'var(--green)' }} /></div>
+                           <span className="detail-value" style={{ color: 'var(--green)' }}>{calculatedAttendance}%</span>
+                        </div>
                       </div>
                    </div>
                 </div>
 
-                <div className="p-card">
-                   <div className="p-card-header">
-                      <StickyNote size={16} /> <span>특이사항 메모</span>
-                      <button className="p-add-note" onClick={() => openNoteModal()}><Plus size={14} /></button>
+                <div className="card">
+                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+                      <div className="detail-section-title">특이사항 메모</div>
+                      <button className="btn-ghost" onClick={() => openNoteModal()} style={{ padding: 4 }}><Plus size={14} /></button>
                    </div>
-                   {notes.length === 0 ? (
-                     <div className="p-empty-notes">기록된 특이사항이 없습니다.</div>
-                   ) : (
-                     <div className="p-notes-list">
-                        {notes.map(n => (
-                          <div key={n.id} className="p-note-item">
-                             <div className="p-note-txt markdown-body">
-                                <ReactMarkdown>{n.text}</ReactMarkdown>
-                             </div>
-                             <div className="p-note-foot">
-                                <span>{n.createdAt}</span>
-                                <div className="p-note-acts">
-                                   <button onClick={() => openNoteModal(n)}><Edit3 size={12} /></button>
-                                   <button className="danger" onClick={() => handleNoteDelete(n.id)}><Trash2 size={12} /></button>
-                                </div>
-                             </div>
-                          </div>
-                        ))}
-                     </div>
-                   )}
+                   <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                      {notes.map(n => (
+                        <div key={n.id} style={{ padding: 12, background: 'var(--bg-elevated)', borderRadius: 10 }}>
+                           <div className="markdown-body" style={{ fontSize: 13, color: 'var(--text-primary)' }}><ReactMarkdown>{n.text}</ReactMarkdown></div>
+                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, fontSize: 11, color: 'var(--text-muted)' }}>
+                              <span>{n.createdAt}</span>
+                              <div style={{ display: 'flex', gap: 4 }}>
+                                 <button onClick={() => openNoteModal(n)} style={{ color: 'var(--text-muted)' }}><Edit3 size={12} /></button>
+                                 <button onClick={() => setNotes(prev => prev.filter(x => x.id !== n.id))} style={{ color: 'var(--red)' }}><Trash2 size={12} /></button>
+                              </div>
+                           </div>
+                        </div>
+                      ))}
+                      {notes.length === 0 && <div className="empty-state" style={{ padding: 20 }}>메모가 없습니다.</div>}
+                   </div>
                 </div>
              </div>
            )}
 
            {activeTab === 'projects' && (
-             <div className="p-content-fade">
-                <div className="p-section-h">
-                   <h3 className="p-sec-title">프로젝트 성취도</h3>
-                   <span className="p-count">{participatedProjects.length}</span>
+             <div style={{ animation: 'fadeIn 0.2s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                   <div className="detail-section-title">프로젝트 성취도</div>
+                   <div style={{ fontSize: 18, fontWeight: 800, color: gpaColor }}>Avg. {calculateGPA()}</div>
                 </div>
-                <div className="p-projects-grid">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
                    {participatedProjects.map(({ project, score }) => {
-                     const participants = getProjectTeamMembers(project.id);
                      const avgScore = score?.team_score || score?.average_score || 0;
-                     
                      return (
-                       <div key={project.id} className="p-project-card" onClick={() => window.location.href = `/teams?project=${project.id}&student=${student.id}`}>
-                          <div className="p-pj-head">
-                             <div style={{ flex: 1 }}>
-                                <div className="p-pj-name" style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                                   {project.name} <ExternalLink size={12} style={{ color: 'var(--accent)' }} />
-                                </div>
-                                <div className="p-pj-date">{score ? formatShortDate(score.created_at) : '평가 전'}</div>
+                       <div key={project.id} className="card" style={{ padding: 16 }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                             <div>
+                                <div style={{ fontSize: 15, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 6 }}>{project.name} <ExternalLink size={12} /></div>
+                                <div style={{ fontSize: 11, color: 'var(--text-muted)', marginTop: 2 }}>{score ? formatShortDate(score.created_at) : '평가 전'}</div>
                              </div>
-                             <div className="p-pj-score" style={{ background: avgScore > 0 ? 'var(--accent-light)' : 'var(--bg-elevated)', border: '1.5px solid var(--border)' }}>
-                                {avgScore.toFixed(1)}
-                             </div>
+                             <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--accent)' }}>{avgScore.toFixed(1)}</div>
                           </div>
-                          
-                          <div className="p-pj-cats" style={{ background: 'var(--bg-base)', borderRadius: 12, padding: '12px 14px', marginTop: 14 }}>
-                             {project.score_categories.map(cat => {
-                               const catVal = score?.category_scores[cat.id] || score?.category_scores[cat.label] || 0;
-                               return (
-                                 <div key={cat.id} className="p-pj-cat" style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
-                                    <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-muted)' }}>{cat.label}</span>
-                                    <div className="p-pj-stars"><StarRating value={catVal} readonly size={12} /></div>
-                                 </div>
-                               );
-                             })}
-                             {project.score_categories.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-muted)', textAlign: 'center' }}>평가 항목이 없습니다</div>}
-                          </div>
-
-                          <div className="p-pj-foot">
-                             <div className="p-participants">
-                                {participants.length > 0 ? participants.map((p: any) => (
-                                  <button key={p.id} className="p-part-chip" onClick={(e) => { e.stopPropagation(); setCurrentStudentId(p.id); }}>
-                                     {p.name}
-                                  </button>
-                                )) : <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>단독 프로젝트</span>}
-                             </div>
-                             <div className="p-final-score">
-                                <span className="p-f-l" style={{ color: 'var(--accent)', fontWeight: 800 }}>최종 팀점수</span>
-                                <span className="p-f-v" style={{ color: 'var(--accent)', fontSize: '20px', fontWeight: 900 }}>{avgScore.toFixed(1)}</span>
-                             </div>
+                          <div style={{ background: 'var(--bg-elevated)', borderRadius: 10, padding: 12 }}>
+                             {project.score_categories.map(cat => (
+                               <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                  <span style={{ fontSize: 12, color: 'var(--text-secondary)' }}>{cat.label}</span>
+                                  <StarRating value={score?.category_scores[cat.id] || score?.category_scores[cat.label] || 0} readonly size={12} />
+                               </div>
+                             ))}
                           </div>
                        </div>
                      );
                    })}
-                   {participatedProjects.length === 0 && (
-                     <div className="p-empty-state">참여 중인 프로젝트가 없습니다.</div>
-                   )}
+                   {participatedProjects.length === 0 && <div className="empty-state">참여 프로젝트가 없습니다.</div>}
                 </div>
              </div>
            )}
 
            {activeTab === 'consultations' && (
-             <div className="p-content-fade">
-                <div className="p-section-h" style={{ marginBottom: 20 }}>
-                   <div className="p-filter-row">
-                      {['전체', '개인상담', '진로상담', '학습점검'].map(type => (
-                        <button key={type} onClick={() => setConsFilter(type as any)} className={`p-filter-btn ${consFilter === type ? 'active' : ''}`}>{type}</button>
-                      ))}
-                   </div>
-                   <button className="p-add-cons" onClick={() => handleOpenConsModal()}><Plus size={16} /> 등록</button>
+             <div style={{ animation: 'fadeIn 0.2s' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
+                   <div className="detail-section-title">상담 이력</div>
+                   <button className="btn btn-primary btn-sm" onClick={() => handleOpenConsModal()} style={{ borderRadius: 8, padding: '4px 12px' }}><Plus size={14} /> 추가</button>
                 </div>
-                
-                <div className="p-timeline">
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                    {filteredConsultations.map(c => (
-                     <div key={c.id} className="p-time-item">
-                        <div className="p-time-line" />
-                        <div className="p-time-dot" />
-                        <div className="p-time-card">
-                           <div className="p-time-head">
-                              <span className="p-time-type">{c.type}</span>
-                              <span className="p-time-date">{formatShortDate(c.consulted_at)}</span>
-                              <div className="p-time-acts">
-                                 <button onClick={() => handleOpenConsModal(c)}><Edit3 size={13} /></button>
-                                 <button className="danger" onClick={() => deleteConsultation(c.id)}><Trash2 size={13} /></button>
-                              </div>
+                     <div key={c.id} className="consult-item">
+                        <div className="consult-meta">
+                           <span className={`badge log-type-${c.type}`}>{c.type}</span>
+                           <span>{formatShortDate(c.consulted_at)}</span>
+                           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                              <button onClick={() => handleOpenConsModal(c)}><Edit3 size={12} /></button>
+                              <button onClick={() => deleteConsultation(c.id)} style={{ color: 'var(--red)' }}><Trash2 size={12} /></button>
                            </div>
-                           <div className="p-time-content markdown-body">
-                              <ReactMarkdown>{c.content}</ReactMarkdown>
-                           </div>
-                           {c.follow_up && (
-                             <div className="p-time-follow markdown-body">
-                                <strong>Action Item:</strong>
-                                <ReactMarkdown>{c.follow_up}</ReactMarkdown>
-                             </div>
-                           )}
                         </div>
+                        <div className="consult-content markdown-body"><ReactMarkdown>{c.content}</ReactMarkdown></div>
                      </div>
                    ))}
+                   {filteredConsultations.length === 0 && <div className="empty-state">기록된 상담이 없습니다.</div>}
                 </div>
              </div>
            )}
         </div>
       </div>
 
-      <ConsultationModal 
-        isOpen={showConsModal}
-        onClose={() => setShowConsModal(false)}
-        onSave={handleConsSubmit}
-        editingCons={editingCons}
-        student={student}
-      />
+      <ConsultationModal isOpen={showConsModal} onClose={() => setShowConsModal(false)} onSave={handleConsSubmit} editingCons={editingCons} student={student} />
 
       {showNoteModal && (
-        <div className="p-modal-overlay" onClick={() => setShowNoteModal(false)}>
-           <div className="p-modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
-              <div className="p-modal-header"><h3>특이사항 메모</h3></div>
-              <div className="p-modal-body">
-                 <textarea className="p-input" rows={5} value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="메모를 입력하세요..." />
+        <div className="modal-overlay" onClick={() => setShowNoteModal(false)}>
+           <div className="modal" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+              <div className="modal-header"><h3 className="modal-title">메모 수정</h3></div>
+              <div className="modal-body">
+                 <textarea className="form-input" rows={6} value={noteText} onChange={e => setNoteText(e.target.value)} placeholder="내용을 입력하세요..." />
               </div>
-              <div className="p-modal-footer">
+              <div className="modal-footer">
                  <button className="btn btn-secondary" onClick={() => setShowNoteModal(false)}>취소</button>
                  <button className="btn btn-primary" onClick={handleNoteSave}>저장</button>
               </div>
            </div>
         </div>
       )}
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .premium-panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1000; display: flex; justify-content: flex-end; animation: pFade 0.3s; backdrop-filter: blur(4px); }
-        .premium-panel { width: 560px; height: 100%; background: var(--bg-surface); display: flex; flex-direction: column; animation: pSlide 0.4s cubic-bezier(0.16, 1, 0.3, 1); position: relative; box-shadow: -20px 0 60px rgba(0,0,0,0.3); border-left: 1px solid var(--border); }
-        .premium-header { padding: 40px 32px 24px; position: relative; overflow: hidden; background: var(--bg-surface); border-bottom: 1px solid var(--border); }
-        .header-bg-blob { position: absolute; top: -50px; right: -50px; width: 200px; height: 200px; background: radial-gradient(circle, var(--accent-glow) 0%, transparent 70%); z-index: 0; }
-        .header-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 32px; position: relative; z-index: 1; }
-        .p-close-btn { background: var(--bg-elevated); border: none; width: 40px; height: 40px; border-radius: 12px; cursor: pointer; color: var(--text-secondary); display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
-        .p-close-btn:hover { background: var(--bg-hover); color: var(--text-primary); transform: rotate(90deg); }
-        .p-gpa-badge { border: 2.5px solid var(--accent); padding: 6px 14px; border-radius: 14px; display: flex; flex-direction: column; align-items: flex-end; background: var(--bg-surface); box-shadow: 0 4px 12px var(--accent-glow); }
-        .p-gpa-label { font-size: 10px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .p-gpa-val { font-size: 28px; font-weight: 950; line-height: 1; margin-top: 2px; font-variant-numeric: tabular-nums; }
-        .p-profile-area { display: flex; align-items: center; gap: 24px; position: relative; z-index: 1; }
-        .p-avatar-hex { width: 72px; height: 72px; background: linear-gradient(135deg, var(--accent) 0%, var(--purple) 100%); border-radius: 22px; display: flex; align-items: center; justify-content: center; transform: rotate(10deg); box-shadow: 8px 8px 16px var(--accent-glow); }
-        .p-avatar-inner { transform: rotate(-10deg); font-size: 32px; font-weight: 950; color: #ffffff; }
-        .p-name-line { display: flex; align-items: center; gap: 12px; }
-        .p-name { font-size: 28px; font-weight: 950; color: var(--text-primary); margin: 0; letter-spacing: -0.5px; }
-        .p-status-badge { font-size: 11px; font-weight: 900; padding: 4px 10px; border-radius: 8px; border: 1.5px solid var(--border); }
-        .p-status-수강중 { border-color: var(--green); color: var(--green); background: var(--green-light); }
-        .p-status-수료 { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
-        .p-status-탈퇴, .p-status-중도포기 { border-color: var(--red); color: var(--red); background: var(--red-light); }
-        .p-meta-chips { display: flex; gap: 10px; margin-top: 8px; }
-        .p-meta-chip { font-size: 12px; color: var(--text-secondary); font-weight: 600; display: flex; align-items: center; gap: 4px; }
-        .p-meta-chip:not(:last-child)::after { content: "•"; margin-left: 6px; opacity: 0.5; }
-        .p-tag-row { display: flex; gap: 8px; margin-top: 24px; flex-wrap: wrap; }
-        .p-tag-item { font-size: 11px; font-weight: 800; color: var(--accent); background: var(--accent-light); padding: 4px 10px; border-radius: 8px; }
-        .p-tab-nav { display: flex; padding: 0 32px; background: var(--bg-surface); border-bottom: 1px solid var(--border); }
-        .p-tab-item { padding: 20px 16px; border: none; background: none; font-size: 13.5px; font-weight: 800; color: #94a3b8; cursor: pointer; transition: all 0.2s; position: relative; display: flex; align-items: center; gap: 8px; }
-        .p-tab-item.active { color: var(--accent); }
-        .p-tab-item.active::after { content: ""; position: absolute; bottom: -1px; left: 0; right: 0; height: 3px; background: var(--accent); border-radius: 3px; }
-        .p-panel-body { flex: 1; overflow-y: auto; padding: 32px; background: var(--bg-base); }
-        .p-card { background: var(--bg-surface); border-radius: 24px; padding: 24px; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 24px; }
-        .p-card-header { display: flex; align-items: center; gap: 10px; font-size: 14px; font-weight: 900; color: var(--text-primary); margin-bottom: 20px; }
-        .p-info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-        .p-info-item { display: flex; flex-direction: column; gap: 6px; }
-        .p-info-item.full { grid-column: span 2; margin-top: 10px; }
-        .p-l { font-size: 11px; font-weight: 800; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; }
-        .p-v { font-size: 14px; font-weight: 700; color: var(--text-primary); }
-        .p-gauge-wrap { display: flex; align-items: center; gap: 12px; margin-top: 4px; }
-        .p-gauge-track { flex: 1; height: 10px; background: var(--bg-elevated); border-radius: 5px; overflow: hidden; }
-        .p-gauge-fill { height: 100%; border-radius: 5px; transition: width 0.8s cubic-bezier(0.16, 1, 0.3, 1); }
-        .p-gauge-val { font-size: 15px; font-weight: 950; min-width: 45px; text-align: right; }
-        .p-section-h { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
-        .p-sec-title { font-size: 18px; font-weight: 950; color: var(--text-primary); margin: 0; }
-        .p-count { background: var(--accent-light); color: var(--accent); font-size: 12px; font-weight: 900; padding: 2px 10px; border-radius: 10px; }
-        .p-projects-grid { display: grid; gap: 20px; }
-        .p-project-card { background: var(--bg-surface); border-radius: 24px; border: 1.5px solid var(--border); padding: 24px; transition: all 0.3s; cursor: pointer; }
-        .p-project-card:hover { transform: translateY(-4px); border-color: var(--accent); box-shadow: 0 12px 30px var(--accent-glow); }
-        .p-pj-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px; }
-        .p-pj-name { font-size: 16px; font-weight: 900; color: var(--text-primary); margin-bottom: 4px; display: flex; align-items: center; gap: 6px; }
-        .p-pj-date { font-size: 11px; color: var(--text-muted); font-weight: 600; }
-        .p-pj-score { width: 44px; height: 44px; background: var(--bg-elevated); border: 1.5px solid var(--accent); border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 20px; font-weight: 950; color: var(--accent); }
-        .p-pj-cats { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 16px; background: var(--bg-base); border-radius: 16px; margin-bottom: 20px; }
-        .p-pj-cat { display: flex; justify-content: space-between; align-items: center; font-size: 12px; font-weight: 700; color: var(--text-secondary); }
-        .p-pj-foot { display: flex; justify-content: space-between; align-items: center; }
-        .p-participants { display: flex; gap: 6px; }
-        .p-part-chip { padding: 4px 10px; background: var(--bg-elevated); border-radius: 8px; font-size: 11px; font-weight: 800; color: var(--text-secondary); cursor: pointer; border: none; transition: all 0.2s; }
-        .p-part-chip:hover { background: var(--accent); color: #ffffff; }
-        .p-final-score { text-align: right; }
-        .p-f-l { font-size: 9px; font-weight: 900; color: var(--text-muted); text-transform: uppercase; display: block; }
-        .p-f-v { font-size: 18px; font-weight: 950; color: var(--text-primary); }
-        .p-timeline { display: flex; flex-direction: column; }
-        .p-time-item { position: relative; padding-left: 32px; padding-bottom: 32px; }
-        .p-time-item:last-child { padding-bottom: 0; }
-        .p-time-line { position: absolute; left: 6px; top: 12px; bottom: 0; width: 2px; background: var(--border); }
-        .p-time-item:last-child .p-time-line { display: none; }
-        .p-time-dot { position: absolute; left: 0; top: 6px; width: 14px; height: 14px; border-radius: 50%; background: var(--bg-surface); border: 3.5px solid var(--accent); z-index: 1; }
-        .p-time-card { background: var(--bg-surface); border-radius: 20px; padding: 20px; border: 1px solid var(--border); box-shadow: 0 4px 12px rgba(0,0,0,0.05); }
-        .p-time-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
-        .p-time-type { font-size: 11px; font-weight: 900; padding: 4px 10px; background: var(--accent-light); color: var(--accent); border-radius: 8px; }
-        .p-time-date { font-size: 11px; color: var(--text-muted); font-weight: 700; flex: 1; }
-        .p-time-acts { display: flex; gap: 4px; }
-        .p-time-acts button { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; border-radius: 6px; transition: all 0.2s; }
-        .p-time-acts button:hover { background: var(--bg-elevated); color: var(--accent); }
-        .p-time-acts button.danger:hover { color: var(--red); }
-        .p-time-content { font-size: 14px; color: var(--text-primary); line-height: 1.65; }
-        .p-time-follow { margin-top: 16px; padding: 14px; background: var(--yellow-light); border-left: 4px solid var(--yellow); border-radius: 0 12px 12px 0; font-size: 13.5px; color: var(--text-primary); }
-        .p-add-cons { background: var(--accent); color: #ffffff; border: none; padding: 6px 14px; border-radius: 10px; font-size: 13px; font-weight: 900; display: flex; align-items: center; gap: 6px; cursor: pointer; transition: all 0.2s; }
-        .p-add-cons:hover { transform: scale(1.05); box-shadow: 0 6px 20px var(--accent-glow); }
-        .p-filter-row { display: flex; gap: 8px; flex-wrap: wrap; }
-        .p-filter-btn { padding: 6px 14px; border-radius: 10px; border: 1.5px solid var(--border); background: var(--bg-elevated); color: var(--text-secondary); font-size: 12px; font-weight: 700; cursor: pointer; transition: all 0.2s; }
-        .p-filter-btn:hover { border-color: var(--accent); color: var(--accent); }
-        .p-filter-btn.active { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
-        .p-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 2000; display: flex; align-items: center; justify-content: center; backdrop-filter: blur(8px); }
-        .p-modal { background: var(--bg-surface); border-radius: 32px; width: 90%; max-width: 500px; box-shadow: 0 40px 100px rgba(0,0,0,0.4); overflow: hidden; animation: pModalIn 0.4s cubic-bezier(0.16, 1, 0.3, 1); border: 1px solid var(--border); }
-        .p-modal-header { padding: 32px 32px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
-        .p-modal-header h3 { margin: 0; font-size: 18px; font-weight: 950; color: var(--text-primary); }
-        .p-modal-body { padding: 32px; display: flex; flex-direction: column; gap: 20px; }
-        .p-modal-footer { padding: 24px 32px; background: var(--bg-elevated); border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 12px; }
-        .p-input { width: 100%; padding: 12px 16px; border: 2px solid var(--border); background: var(--bg-elevated); border-radius: 14px; font-size: 14px; font-weight: 700; color: var(--text-primary); outline: none; transition: border-color 0.2s; }
-        .p-input:focus { border-color: var(--accent); }
-        .p-empty-notes { grid-column: span 2; padding: 20px; text-align: center; color: var(--text-muted); font-size: 13px; font-weight: 600; opacity: 0.7; }
-        .p-empty-state { text-align: center; padding: 40px; color: var(--text-muted); font-size: 14px; font-weight: 600; }
-        
-        @keyframes pFade { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes pSlide { from { transform: translateX(100%); } to { transform: translateX(0); } }
-        @keyframes pModalIn { from { transform: scale(0.9) translateY(20px); opacity: 0; } to { transform: scale(1) translateY(0); opacity: 1; } }
-      `}} />
     </div>
   );
 }

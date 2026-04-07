@@ -13,6 +13,7 @@ import { useData } from '@/context/DataContext';
 import toast from 'react-hot-toast';
 import ReactMarkdown from 'react-markdown';
 import { getStageColorClass } from '@/lib/utils';
+import { format } from 'date-fns';
 
 interface Props {
   team: Team;
@@ -41,27 +42,22 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   
   const [showLogModal, setShowLogModal] = useState(false);
   const [editingLog, setEditingLog] = useState<any>(null);
+  
   const [logForm, setLogForm] = useState({
-    type: '학습점검',
-    date: new Date().toISOString().split('T')[0],
-    time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }),
+    type: '회의록',
+    date: format(new Date(), 'yyyy-MM-dd'),
+    time: format(new Date(), 'HH:mm'),
     content: '',
-    student_id: 0
+    student_id: -1 // Default to Team-wide
   });
 
-  const [activeStudent, setActiveStudent] = useState<Student | null>(null);
+  const [categoryScores, setCategoryScores] = useState<Record<string, number>>({});
 
   useEffect(() => {
-    if (activeStudent) {
-      const score = activeStudent.project_scores.find(ps => ps.project_id === team.project_id);
-      setCategoryScores(score?.category_scores || {});
-    } else {
-      // In a real app we might fetch team-wide score here
-      setCategoryScores({}); 
-    }
-  }, [activeStudent?.id, team.project_id]);
-
-  const [categoryScores, setCategoryScores] = useState<Record<string, number>>({});
+    // Initial category scores from project if needed, but usually we fetch from team grade
+    // For simplicity, we start fresh or from existing context
+     setCategoryScores({});
+  }, [team.id]);
 
   const overallScore = useMemo(() => {
     const cats = Object.values(categoryScores);
@@ -76,17 +72,12 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   };
 
   const handleSaveScores = async () => {
-    if (activeStudent) {
-      await updateProjectScore(activeStudent.id, team.project_id, categoryScores, overallScore);
-      toast.success(`${activeStudent.name}님의 성적이 저장되었습니다`);
-    } else {
-      await updateTeamProjectScore(team.id, team.project_id, categoryScores, overallScore);
-    }
+    await updateTeamProjectScore(team.id, team.project_id, categoryScores, overallScore);
+    toast.success('팀 성취도가 저장되었습니다');
   };
 
   const handleLogSubmit = async () => {
-    if (!logForm.content.trim() || logForm.student_id === 0) return toast.error('내용과 수강생을 선택하세요');
-    
+    if (!logForm.content.trim()) return toast.error('내용을 입력하세요');
     const combinedDateTime = `${logForm.date}T${logForm.time}:00`;
 
     try {
@@ -105,7 +96,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
             student_id: logForm.student_id
           });
         }
-        toast.success('로그가 수정되었습니다');
+        toast.success('기록이 수정되었습니다');
       } else {
         if (logForm.student_id === -1) {
           await addProjectLog({
@@ -127,10 +118,7 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
           toast.success('개인 로그가 추가되었습니다');
         }
       }
-    } catch (err) {
-      console.error(err);
-      return;
-    }
+    } catch (err) { console.error(err); }
     setShowLogModal(false);
   };
 
@@ -147,217 +135,176 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
 
   const formatShortDate = (dateStr: string) => {
     if (!dateStr) return '';
-    try {
-      const d = new Date(dateStr);
-      const now = new Date();
-      const HHmm = dateStr.includes('T') ? dateStr.split('T')[1].slice(0, 5) : '00:00';
-      const MMDD = `${d.getMonth() + 1}-${d.getDate()}`;
-      if (d.toDateString() === now.toDateString()) return HHmm;
-      return `${MMDD} ${HHmm}`;
-    } catch {
-      return dateStr.split('T')[0];
-    }
+    const d = new Date(dateStr);
+    return format(d, 'MM-dd HH:mm');
   };
 
   return (
-    <div className="panel-overlay" onClick={onClose}>
-      <div className="side-panel" onClick={e => e.stopPropagation()}>
-        <div className="panel-header">
-          <div className="header-left">
-            <div className="icon-badge"><Users size={20} /></div>
-            <div className="title-area">
-              <h2 className="panel-title">{team.team_name}</h2>
-              <span className="panel-subtitle">{project?.name}</span>
+    <div className="detail-panel-overlay" onClick={onClose}>
+      <div className="detail-panel" onClick={e => e.stopPropagation()} style={{ width: 500 }}>
+        
+        <div className="detail-panel-header" style={{ position: 'relative', padding: '32px 24px 24px' }}>
+          <button 
+             className="action-btn" 
+             onClick={onClose} 
+             style={{ position: 'absolute', top: 20, right: 20, width: 36, height: 36, color: 'var(--text-primary)', background: 'var(--bg-hover)' }}>
+             <X size={20} />
+          </button>
+          
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <div className="detail-avatar" style={{ width: 48, height: 48, fontSize: 20 }}>{team.team_name[0]}</div>
+            <div>
+              <h2 className="page-title" style={{ margin: 0, fontSize: 22 }}>{team.team_name}</h2>
+              <div className="page-subtitle" style={{ fontSize: 13 }}>{project?.name}</div>
             </div>
           </div>
-          <button className="btn-close-large" onClick={onClose}><X size={24} /></button>
         </div>
 
-        <div className="panel-tabs">
-          <button className={`p-tab ${activeTab === 'info' ? 'active' : ''}`} onClick={() => setActiveTab('info')}>팀 정보</button>
-          <button className={`p-tab ${activeTab === 'eval' ? 'active' : ''}`} onClick={() => setActiveTab('eval')}>성과 평가</button>
-          <button className={`p-tab ${activeTab === 'logs' ? 'active' : ''}`} onClick={() => setActiveTab('logs')}>활동 로그</button>
+        <div style={{ display: 'flex', borderBottom: '1px solid var(--border)', background: 'var(--bg-surface)' }}>
+           {[
+             { id: 'info', label: '팀 정보', icon: Users },
+             { id: 'eval', label: '성과 평가', icon: Award },
+             { id: 'logs', label: '활동 로그', icon: MessageSquare }
+           ].map(tab => (
+             <button 
+                key={tab.id} 
+                onClick={() => setActiveTab(tab.id as any)} 
+                style={{ 
+                  flex: 1, padding: '16px 0', border: 'none', background: 'none', 
+                  fontSize: 13, fontWeight: activeTab === tab.id ? 700 : 500, 
+                  color: activeTab === tab.id ? 'var(--accent)' : 'var(--text-muted)',
+                  borderBottom: `2.5px solid ${activeTab === tab.id ? 'var(--accent)' : 'transparent'}`,
+                  transition: 'all 0.2s'
+                }}>
+                {tab.label}
+             </button>
+           ))}
         </div>
 
-        <div className="panel-main-scroll">
-          {activeTab === 'info' && (
-            <div className="tab-stack">
-              <section className="p-section">
-                <h4 className="s-title"><Clock size={16} /> 프로젝트 진행상황</h4>
-                <div className="status-card">
-                  <div className="prog-head">
-                    <span>진척도 (자동계산)</span>
-                    <strong className="accent-text">{team.progress_pct}%</strong>
-                  </div>
-                  <div className="prog-track-auto" style={{ height: 8, background: 'var(--border)', borderRadius: 4, overflow: 'hidden', margin: '12px 0' }}>
-                    <div style={{ height: '100%', width: `${team.progress_pct}%`, background: 'var(--accent)', transition: 'width 0.3s ease' }} />
-                  </div>
-                  <div className="prog-foot">
-                    <span className={`badge ${project ? getStageColorClass(team.stage, project.stages) : ''}`}>{team.stage}</span>
-                    <span className="update-time">마감일: {project?.end_date || '미정'}</span>
-                  </div>
+        <div className="detail-panel-body" style={{ background: 'var(--bg-base)', padding: 24 }}>
+           {activeTab === 'info' && (
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 24 }}>
+                <section className="detail-section">
+                   <div className="detail-section-title"><Clock size={14} /> 진행 상황</div>
+                   <div className="card" style={{ padding: 18 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 10 }}>
+                         <span style={{ fontSize: 13, fontWeight: 700 }}>진척도</span>
+                         <span style={{ color: 'var(--accent)', fontWeight: 800 }}>{team.progress_pct}%</span>
+                      </div>
+                      <div className="progress-bg"><div className="progress-fill" style={{ width: `${team.progress_pct}%`, background: 'var(--accent)' }} /></div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 12 }}>
+                         <span className={`badge ${project ? getStageColorClass(team.stage, project.stages) : ''}`}>{team.stage}</span>
+                         <span style={{ fontSize: 11, color: 'var(--text-muted)' }}>마감: {project?.end_date || '미정'}</span>
+                      </div>
+                   </div>
+                </section>
+
+                <section className="detail-section">
+                   <div className="detail-section-title"><Users size={14} /> 팀원 ({members.length})</div>
+                   <div className="card" style={{ padding: 0 }}>
+                      <table style={{ width: '100%' }}>
+                         <tbody>
+                            {members.map(member => {
+                              const s = students.find(x => x.id === member.student_id);
+                              return s ? (
+                                <tr key={member.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                                   <td style={{ padding: '12px 16px' }}>
+                                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 600 }}>
+                                         {s.name} {member.student_id === team.leader_id && <Crown size={12} color="var(--yellow)" />}
+                                      </div>
+                                   </td>
+                                   <td style={{ padding: '12px 16px' }}>
+                                      <input className="form-input" style={{ height: 30, fontSize: 12 }} value={member.role || ''} onChange={e => updateTeamMemberRole(member.id, e.target.value)} placeholder="역할..." />
+                                   </td>
+                                   <td style={{ textAlign: 'right', padding: '12px 16px' }}>
+                                      <button onClick={() => removeTeamMember(member.id)} style={{ color: 'var(--text-muted)' }}><Trash2 size={13} /></button>
+                                   </td>
+                                </tr>
+                              ) : null;
+                            })}
+                         </tbody>
+                      </table>
+                      <button className="add-todo-btn" style={{ padding: '12px 16px', justifyContent: 'center' }} onClick={() => setShowMemberSelector(true)}>
+                         <Plus size={14} /> 팀원 추가
+                      </button>
+                   </div>
+                </section>
+             </div>
+           )}
+
+           {activeTab === 'eval' && (
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                <div className="card" style={{ background: 'var(--accent)', color: 'white', border: 'none', padding: 24, textAlign: 'center' }}>
+                   <div style={{ opacity: 0.9, fontSize: 12, fontWeight: 700, marginBottom: 8 }}>팀 종합 성취도</div>
+                   <div style={{ fontSize: 48, fontWeight: 900 }}>{overallScore.toFixed(1)}</div>
                 </div>
-              </section>
-
-              <section className="p-section">
-                <h4 className="s-title"><LinkIcon size={16} /> 프로젝트 리소스</h4>
-                <div className="card-flat">
-                  <label className="f-label">저장소/데모 링크</label>
-                  <div className="input-with-action">
-                    <input className="form-input" placeholder="https://github.com/..." value={projectLink} onChange={e => setProjectLink(e.target.value)} />
-                    <button className="btn btn-secondary btn-icon" onClick={handleSaveInfo}><Check size={18} /></button>
-                  </div>
+                <div className="card">
+                   {project?.score_categories.map(cat => (
+                     <div key={cat.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '14px 0', borderBottom: '1px solid var(--border)' }}>
+                        <span style={{ fontSize: 13, fontWeight: 700 }}>{cat.label}</span>
+                        <StarRating 
+                           key={`team-${cat.id}-${categoryScores[cat.id] || 0}`}
+                           value={categoryScores[cat.id] || 0} 
+                           onChange={v => setCategoryScores(prev => ({ ...prev, [cat.id]: v }))} 
+                           size={20} 
+                        />
+                     </div>
+                   ))}
+                   <button className="btn btn-primary" style={{ width: '100%', marginTop: 24, height: 48 }} onClick={handleSaveScores}>
+                      <Save size={16} /> 팀 점수 저장
+                   </button>
                 </div>
-              </section>
+             </div>
+           )}
 
-              <section className="p-section">
-                <h4 className="s-title"><StickyNote size={16} /> 프로젝트 메모</h4>
-                <div className="card-flat" style={{ padding: 12 }}>
-                  <textarea 
-                    className="form-input" 
-                    rows={4} 
-                    placeholder="프로젝트 관련 특이사항 기록..." 
-                    value={teamMemo} 
-                    onChange={e => setTeamMemo(e.target.value)}
-                    style={{ border: 'none', background: 'transparent', resize: 'vertical' }}
-                  />
-                  <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
-                    <button className="btn btn-primary btn-sm" onClick={handleSaveInfo} style={{ gap: 6 }}>
-                      <Save size={14} /> 저장
-                    </button>
-                  </div>
-                </div>
-              </section>
-
-              <section className="p-section">
-                <div className="s-between">
-                  <h4 className="s-title"><Users size={16} /> 팀 구성원 ({members.length})</h4>
-                  <button className="btn btn-ghost btn-sm" onClick={() => setShowMemberSelector(true)}><UserPlus size={14} /> 추가</button>
-                </div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
-                  <tbody>
-                    {members.map(member => {
-                      const student = students.find(s => s.id === member.student_id);
-                      if (!student) return null;
-                      return (
-                        <tr key={member.id} style={{ borderBottom: '1px solid var(--border)' }}>
-                          <td style={{ padding: '16px 20px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
-                                {student.name}
-                                {member.student_id === team.leader_id && <span style={{ marginLeft: 6, color: 'var(--yellow)' }}>👑</span>}
-                              </span>
-                            </div>
-                          </td>
-                          <td style={{ padding: '16px 20px' }}>
-                            <input 
-                              className="form-input" 
-                              value={member.role || ''} 
-                              onChange={(e) => updateTeamMemberRole(member.id, e.target.value)}
-                              placeholder="역할 입력..."
-                              style={{ height: 32, fontSize: 12, padding: '0 10px', background: 'transparent' }}
-                            />
-                          </td>
-                          <td style={{ padding: '16px 20px', textAlign: 'right' }}>
-                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                              <button className="btn btn-secondary" onClick={() => updateTeam(team.id, { leader_id: member.student_id })} style={{ padding: '0 8px', height: 28, fontSize: 10, visibility: member.student_id === team.leader_id ? 'hidden' : 'visible' }}>👑 팀장</button>
-                              <button onClick={() => removeTeamMember(member.id)} className="btn btn-ghost" style={{ width: 28, height: 28, padding: 0 }}><Trash2 size={12} /></button>
-                            </div>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </section>
-            </div>
-          )}
-
-          {activeTab === 'eval' && (
-            <div className="tab-stack">
-              <div className="eval-student-picker" style={{ display: 'flex', gap: 8, marginBottom: 16, overflowX: 'auto', paddingBottom: 8 }}>
-                 <button className={`btn btn-sm ${!activeStudent ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveStudent(null)}>팀 전체</button>
-                 {members.map(m => {
-                    const s = students.find(std => std.id === m.student_id);
-                    return s ? (
-                      <button key={s.id} className={`btn btn-sm ${activeStudent?.id === s.id ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setActiveStudent(s)}>{s.name}</button>
-                    ) : null;
-                 })}
-              </div>
-              <div className="score-summary-card" style={{ background: activeStudent ? 'var(--purple)' : 'var(--accent)', color: 'white' }}>
-                 <div className="total-title" style={{ opacity: 0.9, fontSize: '12px', fontWeight: 800 }}>{activeStudent ? `${activeStudent.name}님 성취도` : '팀 종합 성취도'}</div>
-                 <div className="total-hero" style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8 }}>
-                    <StarRating value={overallScore} readonly size={36} />
-                    <span className="total-num" style={{ fontSize: '42px', fontWeight: 900 }}>{overallScore.toFixed(1)}</span>
-                 </div>
-              </div>
-              <div className="cats-management">
-                 <h4 className="s-title">평가 세부 항목</h4>
-                 <div className="cats-list-entry" style={{ marginTop: 12 }}>
-                    {(project?.score_categories || []).map((cat) => (
-                        <div key={cat.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{cat.label}</span>
-                          <StarRating 
-                             key={`${activeStudent?.id || 'team'}-${cat.id}-${categoryScores[cat.id] || 0}`}
-                             value={categoryScores[cat.id] || 0} 
-                             onChange={v => setCategoryScores(prev => ({ ...prev, [cat.id]: v }))} 
-                             size={20} 
-                          />
-                        </div>
-                    ))}
-                    {(!project?.score_categories || project.score_categories.length === 0) && <div style={{ textAlign: 'center', padding: 20, color: 'var(--text-muted)', fontSize: 12 }}>평가 항목이 정의되지 않았습니다.</div>}
-                 </div>
-                 <button className="btn btn-primary btn-full" onClick={handleSaveScores} style={{ marginTop: 24, height: 48, width: '100%' }}>
-                    <Save size={16} /> {activeStudent ? `${activeStudent.name} 점수 저장` : '팀 점수 전체 저장'}
-                 </button>
-              </div>
-            </div>
-          )}
-
-          {activeTab === 'logs' && (
-            <div className="tab-stack">
-              <div className="s-between">
-                <h4 className="s-title">활동 기록 / 피드백</h4>
-                <button className="btn btn-primary btn-sm" onClick={() => { setEditingLog(null); setLogForm({ type: '회의록', date: new Date().toISOString().split('T')[0], time: new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }), content: '', student_id: -1 }); setShowLogModal(true); }}>
-                  <Plus size={14} /> 로그 추가
+           {activeTab === 'logs' && (
+             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+                <button className="btn btn-primary" style={{ width: '100%', gap: 6 }} onClick={() => { 
+                   setEditingLog(null); 
+                   setLogForm({ 
+                     type: '회의록', date: format(new Date(), 'yyyy-MM-dd'), time: format(new Date(), 'HH:mm'), 
+                     content: '', student_id: -1 
+                   }); 
+                   setShowLogModal(true); 
+                }}>
+                   <Plus size={15} /> 활동 로그 추가
                 </button>
-              </div>
-              <div className="logs-timeline">
-                {teamTimeline.map(c => {
-                  const student = students.find(s => s.id === c.student_id);
-                  return (
-                    <div key={`${c.isTeam ? 't' : 's'}-${c.id}`} className={`log-card ${c.isTeam ? 'is-team' : ''}`}>
-                       <div className="log-head">
-                          <div className="log-meta">
-                             <span className="log-date">{formatShortDate(c.date)}</span>
-                             <span className="log-author">{c.isTeam ? '👥 팀 전체' : student?.name}</span>
-                          </div>
-                          <div className="log-actions">
-                             <button className="act-btn" onClick={() => { setEditingLog(c); setLogForm({ type: c.type, date: c.date.split('T')[0], time: c.date.includes('T') ? c.date.split('T')[1].slice(0, 5) : '00:00', content: c.content, student_id: c.student_id }); setShowLogModal(true); }}><Edit3 size={12} /></button>
-                             <button className="act-btn danger" onClick={() => { if(confirm('삭제하시겠습니까?')) { if (c.isTeam) deleteProjectLog(c.id); else deleteConsultation(c.id); } }}><Trash2 size={12} /></button>
-                          </div>
-                       </div>
-                       <div className="log-body markdown-body"><ReactMarkdown>{c.content}</ReactMarkdown></div>
-                    </div>
-                  );
-                })}
-                {teamTimeline.length === 0 && <div className="empty-logs">기록된 활동 로그가 없습니다.</div>}
-              </div>
-            </div>
-          )}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginTop: 4 }}>
+                   {teamTimeline.map(c => (
+                     <div key={`${c.isTeam ? 't' : 's'}-${c.id}`} className="consult-item" style={{ borderLeft: c.isTeam ? '4px solid var(--accent)' : 'none' }}>
+                        <div className="consult-meta">
+                           <span className="badge">{c.type}</span>
+                           <span>{formatShortDate(c.date)}</span>
+                           <span>{c.isTeam ? '👥 팀' : '👤 개인'}</span>
+                           <div style={{ marginLeft: 'auto', display: 'flex', gap: 6 }}>
+                              <button onClick={() => { 
+                                setEditingLog(c); 
+                                setLogForm({ type: c.type, date: c.date.split('T')[0], time: c.date.includes('T') ? c.date.split('T')[1].slice(0, 5) : '00:00', content: c.content, student_id: c.student_id }); 
+                                setShowLogModal(true); 
+                              }}><Edit3 size={12} /></button>
+                              <button onClick={() => { if(confirm('삭제하시겠습니까?')) { if (c.isTeam) deleteProjectLog(c.id); else deleteConsultation(c.id); } }} style={{ color: 'var(--red)' }}><Trash2 size={12} /></button>
+                           </div>
+                        </div>
+                        <div className="consult-content markdown-body"><ReactMarkdown>{c.content}</ReactMarkdown></div>
+                     </div>
+                   ))}
+                </div>
+             </div>
+           )}
         </div>
       </div>
 
       {showMemberSelector && (
-        <div className="modal-sub-overlay" onClick={() => setShowMemberSelector(false)}>
-          <div className="modal-sub card" onClick={e => e.stopPropagation()}>
-            <div className="modal-sub-header"><h3>팀원 추가</h3></div>
-            <div className="modal-sub-body">
+        <div className="modal-overlay" onClick={() => setShowMemberSelector(false)}>
+          <div className="modal card" style={{ maxWidth: 400 }} onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><h3 className="modal-title">팀원 추가</h3></div>
+            <div className="modal-body">
               <input className="form-input" placeholder="이름으로 검색..." value={memberSearch} onChange={e => setMemberSearch(e.target.value)} autoFocus />
-              <div className="m-list-scroll">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 12, maxHeight: 300, overflowY: 'auto' }}>
                 {students.filter(s => s.name.includes(memberSearch) && !members.some(m => m.student_id === s.id)).map(s => (
-                  <div key={s.id} className="m-item-choice" onClick={() => { addTeamMember(team.id, s.id); setShowMemberSelector(false); }}>
-                    <span>{s.name}</span><Plus size={14} />
+                  <div key={s.id} onClick={() => { addTeamMember(team.id, s.id); setShowMemberSelector(false); }} 
+                    style={{ padding: 12, borderRadius: 8, background: 'var(--bg-elevated)', display: 'flex', justifyContent: 'space-between', cursor: 'pointer' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{s.name}</span><Plus size={14} />
                   </div>
                 ))}
               </div>
@@ -367,82 +314,60 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
       )}
 
       {showLogModal && (
-        <div className="modal-sub-overlay" onClick={() => setShowLogModal(false)}>
-           <div className="modal-sub card" onClick={e => e.stopPropagation()}>
-              <div className="modal-sub-header"><h3>{editingLog ? '로그 수정' : '로그 추가'}</h3></div>
-              <div className="modal-sub-body">
-                 <div className="f-field">
-                    <label>대상 팀원</label>
+        <div className="modal-overlay" onClick={() => setShowLogModal(false)}>
+           <div className="modal card" style={{ maxWidth: 440 }} onClick={e => e.stopPropagation()}>
+              <div className="modal-header"><h3 className="modal-title">{editingLog ? '기록 수정' : '활동 로그 추가'}</h3></div>
+              <div className="modal-body">
+                 <div className="form-field">
+                    <label className="form-label">기록 대상</label>
                     <select className="form-select" value={logForm.student_id} onChange={e => setLogForm(f => ({ ...f, student_id: Number(e.target.value) }))}>
-                       <option value={0}>선택...</option>
-                       <option value={-1}>팀원 전체</option>
+                       <option value={-1}>팀 전체</option>
                        {members.map(m => {
                          const s = students.find(std => std.id === m.student_id);
-                         return s ? <option key={m.id} value={s.id}>{s.name}</option> : null;
+                         return s ? <option key={m.id} value={s.id}>{s.name} (개인)</option> : null;
                        })}
                     </select>
                  </div>
-                 <div className="f-field">
-                    <label>내용</label>
-                    <textarea className="form-input" rows={4} value={logForm.content} onChange={e => setLogForm(f => ({ ...f, content: e.target.value }))} />
+                 <div className="form-field">
+                    <label className="form-label">내용</label>
+                    <textarea className="form-input" rows={6} value={logForm.content} onChange={e => setLogForm(f => ({ ...f, content: e.target.value }))} />
                  </div>
-                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-                    <div className="f-field">
-                       <label>날짜</label>
+                 <div className="form-row">
+                    <div className="form-field">
+                       <label className="form-label">날짜</label>
                        <input type="date" className="form-input" value={logForm.date} onChange={e => setLogForm(f => ({ ...f, date: e.target.value }))} />
                     </div>
-                    <div className="f-field">
-                       <label>유형</label>
-                       <select className="form-select" value={logForm.type} onChange={e => setLogForm(f => ({ ...f, type: e.target.value as any }))}>
-                          {logForm.student_id === -1 ? (
-                            <>
-                              <option value="회의록">회의록</option>
-                              <option value="멘토피드백">멘토피드백</option>
-                              <option value="진행보고">진행보고</option>
-                            </>
-                          ) : (
-                            <>
-                              <option value="학습점검">개발로그</option>
-                              <option value="개인상담">피드백</option>
-                              <option value="기타">기타</option>
-                            </>
-                          )}
-                       </select>
+                    <div className="form-field">
+                       <label className="form-label">시간</label>
+                       <input type="time" className="form-input" value={logForm.time} onChange={e => setLogForm(f => ({ ...f, time: e.target.value }))} />
                     </div>
                  </div>
+                 <div className="form-field">
+                    <label className="form-label">유형</label>
+                    <select className="form-select" value={logForm.type} onChange={e => setLogForm(f => ({ ...f, type: e.target.value as any }))}>
+                       {logForm.student_id === -1 ? (
+                         <>
+                           <option value="회의록">회의록</option>
+                           <option value="멘토피드백">멘토피드백</option>
+                           <option value="진행보고">진행보고</option>
+                         </>
+                       ) : (
+                         <>
+                           <option value="학습점검">개발로그</option>
+                           <option value="개인상담">피드백</option>
+                           <option value="기타">기타</option>
+                         </>
+                       )}
+                    </select>
+                 </div>
               </div>
-              <div className="modal-sub-footer">
+              <div className="modal-footer">
                  <button className="btn btn-secondary" onClick={() => setShowLogModal(false)}>취소</button>
                  <button className="btn btn-primary" onClick={handleLogSubmit}>저장</button>
               </div>
            </div>
         </div>
       )}
-
-      <style dangerouslySetInnerHTML={{ __html: `
-        .panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 1000; display: flex; justify-content: flex-end; animation: fadeIn 0.2s; }
-        .side-panel { width: 500px; height: 100%; background: var(--bg-surface); box-shadow: -15px 0 40px rgba(0,0,0,0.18); display: flex; flex-direction: column; overflow: hidden; animation: slideInRight 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
-        .panel-header { padding: 28px 24px 24px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: flex-start; }
-        .icon-badge { width: 46px; height: 46px; background: var(--accent-light); color: var(--accent); border-radius: 14px; display: flex; align-items: center; justify-content: center; }
-        .panel-tabs { display: flex; border-bottom: 1px solid var(--border); background: var(--bg-elevated); }
-        .p-tab { flex: 1; padding: 16px 0; border: none; background: none; font-size: 13px; font-weight: 800; color: var(--text-muted); cursor: pointer; border-bottom: 3px solid transparent; }
-        .p-tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--bg-surface); }
-        .panel-main-scroll { flex: 1; overflow-y: auto; padding: 24px; background: var(--bg-base); }
-        .tab-stack { display: flex; flex-direction: column; gap: 28px; }
-        .s-title { font-size: 12px; font-weight: 800; color: var(--text-muted); display: flex; align-items: center; gap: 8px; text-transform: uppercase; }
-        .status-card { padding: 20px; background: var(--bg-surface); border-radius: 18px; border: 1.5px solid var(--border); }
-        .prog-head { display: flex; justify-content: space-between; align-items: baseline; }
-        .accent-text { font-size: 26px; font-weight: 900; color: var(--accent); }
-        .card-flat { padding: 16px; background: var(--bg-surface); border-radius: 12px; border: 1.5px solid var(--border); }
-        .modal-sub-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 10000; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.2s; }
-        .modal-sub { background: var(--bg-surface); border-radius: 24px; width: 440px; box-shadow: 0 30px 60px rgba(0,0,0,0.3); }
-        .log-card { padding: 20px; background: var(--bg-surface); border-radius: 16px; border: 1.5px solid var(--border); margin-bottom: 16px; }
-        .log-card.is-team { border-left: 4px solid var(--accent); background: var(--accent-light); }
-        .total-hero { display: flex; alignItems: center; gap: 16px; }
-        
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
-        @keyframes slideInRight { from { transform: translateX(100%); } to { transform: translateX(0); } }
-      `}} />
     </div>
   );
 }
