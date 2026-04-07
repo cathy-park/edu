@@ -297,14 +297,21 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const updateTeam = async (id: number, data: Partial<Team>) => {
-    const updateData: any = {};
-    const allowedKeys = ['project_id', 'team_name', 'stage', 'progress_pct', 'leader_id', 'memo', 'project_link'];
+    let updateData = { ...data };
     
-    Object.keys(data).forEach(key => {
-      if (allowedKeys.includes(key)) {
-        updateData[key] = (data as any)[key];
+    // Auto-calculate progress if stage is changed
+    if (data.stage) {
+      const currentTeam = teams.find(t => t.id === id);
+      const projectId = data.project_id || currentTeam?.project_id;
+      const project = projects.find(p => p.id === projectId);
+      
+      if (project && project.stages && project.stages.length > 0) {
+        const stageIndex = project.stages.indexOf(data.stage);
+        if (stageIndex !== -1) {
+          updateData.progress_pct = Math.round(((stageIndex + 1) / project.stages.length) * 100);
+        }
       }
-    });
+    }
 
     const { error } = await supabase.from('teams').update(updateData).eq('id', id);
     if (error) {
