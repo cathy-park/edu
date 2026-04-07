@@ -208,7 +208,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       toast.error('학생이 추가되었으나 데이터를 받지 못했습니다. (RLS 확인 필요)');
       return undefined;
     } else {
-      const newStudent = { ...data, project_scores: data.grades || [] };
+      const newStudent = { 
+        ...data, 
+        cohort: data.cohorts, // Map cohorts (plural) to cohort (singular) for UI filtering
+        project_scores: data.grades || [] 
+      };
       setStudents(prev => [newStudent, ...prev]);
       toast.success('수강생이 추가되었습니다');
       return data.id;
@@ -271,7 +275,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       progress_pct: t.progress_pct,
       leader_id: t.leader_id,
       memo: t.memo,
-      project_link: t.project_link
+      project_link: t.project_link,
+      is_individual: t.is_individual ?? false
     };
     
     const { data, error } = await supabase.from('teams').insert([insertData]).select().single();
@@ -472,7 +477,12 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       return undefined;
     }
 
-    const { data, error } = await supabase.from('projects').insert([insertData]).select().single();
+    const { data, error } = await supabase
+      .from('projects')
+      .insert([insertData])
+      .select('*, cohort:cohorts(name)') // Alias cohorts to cohort for UI
+      .single();
+
     if (error) {
       console.error('Insert project error:', error.message, error.details);
       toast.error(`프로젝트 생성 실패: ${error.message} (${error.hint || '데이터 확인'})`);
