@@ -76,11 +76,15 @@ function ProjectManagementContent() {
     name: string;
     description: string;
     cohort_id: number;
+    start_date: string;
+    end_date: string;
     stages: string[];
   }>({
     name: '',
     description: '',
-    cohort_id: 0,
+    cohort_id: currentCohortId,
+    start_date: '',
+    end_date: '',
     stages: ['기획', '디자인', '개발', '검증', '완료']
   });
 
@@ -136,6 +140,8 @@ function ProjectManagementContent() {
         name: p.name,
         description: p.description || '',
         cohort_id: p.cohort_id,
+        start_date: p.start_date || '',
+        end_date: p.end_date || '',
         stages: p.stages
       });
     } else {
@@ -144,6 +150,8 @@ function ProjectManagementContent() {
         name: '',
         description: '',
         cohort_id: currentCohortId,
+        start_date: '',
+        end_date: '',
         stages: ['기획', '디자인', '개발', '검증', '완료']
       });
     }
@@ -184,6 +192,8 @@ function ProjectManagementContent() {
       updateProject(editingProject, { 
         name: projectForm.name, 
         description: projectForm.description,
+        start_date: projectForm.start_date || undefined,
+        end_date: projectForm.end_date || undefined,
         stages: projectForm.stages,
         score_categories: syncedCategories
       });
@@ -193,6 +203,8 @@ function ProjectManagementContent() {
         name: projectForm.name, 
         description: projectForm.description, 
         cohort_id: projectForm.cohort_id,
+        start_date: projectForm.start_date || undefined,
+        end_date: projectForm.end_date || undefined,
         stages: projectForm.stages,
         score_categories: syncedCategories
       });
@@ -436,7 +448,18 @@ function ProjectManagementContent() {
               </div>
               <div>
                 <label className="modal-label">설명</label>
-                <textarea className="form-input" value={projectForm.description} onChange={e => setProjectForm(p => ({ ...p, description: e.target.value }))} rows={3} placeholder="프로젝트에 대한 간단한 설명..." />
+                <textarea className="form-input" value={projectForm.description} onChange={e => setProjectForm(p => ({ ...p, description: e.target.value }))} rows={2} placeholder="프로젝트에 대한 간단한 설명..." />
+              </div>
+              
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+                <div>
+                  <label className="modal-label">시작 날짜</label>
+                  <input type="date" className="form-input" value={projectForm.start_date} onChange={e => setProjectForm(p => ({ ...p, start_date: e.target.value }))} />
+                </div>
+                <div>
+                  <label className="modal-label">종료 날짜</label>
+                  <input type="date" className="form-input" value={projectForm.end_date} onChange={e => setProjectForm(p => ({ ...p, end_date: e.target.value }))} />
+                </div>
               </div>
 
               <div style={{ borderTop: '1px solid var(--border)', paddingTop: 20 }}>

@@ -73,6 +73,8 @@ export interface Project {
   cohort_id: number;
   name: string;
   description?: string;
+  start_date?: string;
+  end_date?: string;
   stages: string[];
   score_categories: { id: string; label: string }[];
   created_at?: string;

@@ -48,16 +48,25 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
     student_id: 0
   });
 
-  const [categoryScores, setCategoryScores] = useState<Record<string, number>>({});
+  const [activeStudent, setActiveStudent] = useState<Student | null>(null);
 
-  // Initialize scores based on current project stages
+  // Initialize active student to first member if not set
   useEffect(() => {
-    if (members.length > 0) {
-      const student = students.find(s => s.id === members[0].student_id);
-      const score = student?.project_scores.find(ps => ps.project_id === team.project_id);
+    if (members.length > 0 && !activeStudent) {
+      const firstStudent = students.find(s => s.id === members[0].student_id);
+      if (firstStudent) setActiveStudent(firstStudent);
+    }
+  }, [members.length, students, activeStudent]);
+
+  // Sync scores when active student changes
+  useEffect(() => {
+    if (activeStudent) {
+      const score = activeStudent.project_scores.find(ps => ps.project_id === team.project_id);
       setCategoryScores(score?.category_scores || {});
     }
-  }, [members.length, team.project_id, students]);
+  }, [activeStudent?.id, team.project_id]);
+
+  const [categoryScores, setCategoryScores] = useState<Record<string, number>>({});
 
   const overallScore = useMemo(() => {
     const cats = Object.values(categoryScores);
@@ -72,11 +81,9 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
   };
 
   const handleSaveScores = () => {
-    if (members.length === 0) return toast.error('평가할 팀원이 없습니다');
-    members.forEach(m => {
-      updateProjectScore(m.student_id, team.project_id, categoryScores, overallScore);
-    });
-    toast.success('팀 및 개인별 점수가 일괄 반영되었습니다');
+    if (!activeStudent) return toast.error('평가할 팀원을 선택하세요');
+    updateProjectScore(activeStudent.id, team.project_id, categoryScores, overallScore);
+    toast.success(`${activeStudent.name}님의 성적이 반영되었습니다`);
   };
 
   const handleLogSubmit = async () => {
@@ -198,52 +205,79 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                   <button className="btn btn-ghost btn-sm" onClick={() => setShowMemberSelector(true)}><UserPlus size={14} /> 추가</button>
                 </div>
 
-                <div className="member-grid">
-                  {members.map(m => {
-                    const s = students.find(std => std.id === m.student_id);
-                    if (!s) return null;
-                    return (
-                      <div key={m.id} className="m-row" onClick={() => onMemberClick(m.student_id)}>
-                        <div className="m-avatar">{s.name[0]}</div>
-                        <div className="m-info">
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                            <span className="m-name">{s.name}</span>
-                            {team.leader_id === m.student_id && <Crown size={14} style={{ color: 'var(--yellow)', fill: 'var(--yellow)', opacity: 0.9 }} />}
-                          </div>
-                          <input 
-                            className="m-role-input" 
-                            defaultValue={m.role || ''} 
-                            placeholder="역할 입력 (예: 기획, 개발)"
-                            onClick={(e) => e.stopPropagation()}
-                            onBlur={(e) => {
-                              if (e.target.value !== m.role) {
-                                updateTeamMemberRole(m.id, e.target.value);
-                                toast.success(`${s.name} 역할이 수정되었습니다`);
-                              }
-                            }}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
-                            }}
-                          />
-                        </div>
-                        <button className="m-del" onClick={(e) => { e.preventDefault(); e.stopPropagation(); if(confirm('팀원을 제외하시겠습니까?')) removeTeamMember(m.id); }}><X size={14} /></button>
-                      </div>
-                    );
-                  })}
-                </div>
+                <table style={{ width: '100%', borderCollapse: 'collapse', marginTop: 10 }}>
+                  <tbody>
+                    {members.map(member => {
+                      const student = students.find(s => s.id === member.student_id);
+                      if (!student) return null;
+                      return (
+                        <tr key={member.id} style={{ borderBottom: '1px solid var(--border)' }}>
+                          <td style={{ padding: '16px 20px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                              <span style={{ fontWeight: 700, color: 'var(--text-primary)' }}>
+                                {student.name}
+                                {member.student_id === team.leader_id && <span style={{ marginLeft: 6, color: 'var(--yellow)', cursor: 'default' }} title="팀장">👑</span>}
+                              </span>
+                            </div>
+                          </td>
+                          <td style={{ padding: '16px 20px' }}>
+                            <input 
+                              className="form-input" 
+                              value={member.role || ''} 
+                              onChange={(e) => updateTeamMemberRole(member.id, e.target.value)}
+                              placeholder="역할 입력..."
+                              style={{ height: 32, fontSize: 12, padding: '0 10px', background: 'transparent' }}
+                            />
+                          </td>
+                          <td style={{ padding: '16px 20px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                              <button 
+                                className="btn btn-secondary" 
+                                onClick={() => updateTeam(team.id, { leader_id: member.student_id })}
+                                style={{ padding: '0 8px', height: 28, fontSize: 10, display: 'flex', alignItems: 'center', gap: 4, visibility: member.student_id === team.leader_id ? 'hidden' : 'visible' }}
+                              >
+                                👑 팀장
+                              </button>
+                              <button onClick={() => removeTeamMember(member.id)} className="btn btn-ghost" style={{ width: 28, height: 28, padding: 0 }} title="팀원 제외">
+                                <Trash2 size={12} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
               </section>
             </div>
           )}
 
           {activeTab === 'eval' && (
             <div className="tab-stack">
+              <div className="f-field">
+                <label>평가 대상 팀원</label>
+                <select 
+                  className="form-select" 
+                  value={activeStudent?.id || 0} 
+                  onChange={e => {
+                    const sid = Number(e.target.value);
+                    const std = students.find(s => s.id === sid);
+                    if (std) setActiveStudent(std);
+                  }}
+                >
+                  {members.map(m => {
+                    const s = students.find(std => std.id === m.student_id);
+                    return s ? <option key={m.id} value={s.id}>{s.name}</option> : null;
+                  })}
+                </select>
+              </div>
+
               <div className="score-summary-card" style={{ background: 'var(--accent)', color: 'white' }}>
-                 <div className="total-title" style={{ opacity: 0.9, fontSize: '12px', fontWeight: 800 }}>팀 종합 점수 (항목별 평균 자동산출)</div>
+                 <div className="total-title" style={{ opacity: 0.9, fontSize: '12px', fontWeight: 800 }}>개인 종합 점수</div>
                  <div className="total-hero" style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 8 }}>
                     <StarRating value={overallScore} readonly size={36} />
                     <span className="total-num" style={{ fontSize: '42px', fontWeight: 900 }}>{overallScore.toFixed(1)}</span>
                  </div>
-                 <p className="total-hint" style={{ marginTop: 12, fontSize: '12px', opacity: 0.8 }}>세부 항목 별점을 입력하면 총점이 자동으로 계산됩니다.</p>
               </div>
 
               <div className="cats-management">
@@ -252,11 +286,10 @@ export default function TeamDetail({ team, onClose, onProgressUpdate, onMemberCl
                     {(project?.stages || []).map((stage, idx) => {
                       const catId = stage.toLowerCase().replace(/\s+/g, '_').replace(/[^\w]/g, '');
                       return (
-                        <div key={catId} className="cat-entry-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 0', borderBottom: '1px solid var(--border)' }}>
-                          <div className="cat-meta">
-                            <span className="cat-label" style={{ fontSize: '14px', fontWeight: 700 }}>{idx + 1}. {stage}</span>
-                          </div>
+                        <div key={catId} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-secondary)' }}>{stage}</span>
                           <StarRating 
+                            key={`${activeStudent?.id || 0}-${catId}-${categoryScores[catId] || 0}`}
                             value={categoryScores[catId] || 0} 
                             onChange={v => setCategoryScores(prev => ({ ...prev, [catId]: v }))} 
                             size={20} 

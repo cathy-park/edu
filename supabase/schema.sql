@@ -60,6 +60,8 @@ create table public.projects (
   description text,
   stages text[] default '{"기획", "디자인", "개발", "검증", "완료"}',
   score_categories jsonb default '[{"id": "planning", "label": "기획"}, {"id": "development", "label": "개발"}, {"id": "design", "label": "디자인"}, {"id": "communication", "label": "소통"}]',
+  start_date date,
+  end_date date,
   created_at timestamptz default now()
 );
 

@@ -397,14 +397,26 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addConsultation = async (c: Omit<Consultation, 'id' | 'created_at'>) => {
-    const { data, error } = await supabase.from('consultations').insert([c]).select().single();
+    console.log('Attempting to save consultation:', c);
+    const { data, error } = await supabase.from('consultations').insert([{
+      student_id: c.student_id,
+      project_id: c.project_id || null,
+      consulted_at: c.consulted_at,
+      type: c.type,
+      content: c.content,
+      follow_up: c.follow_up || ''
+    }]).select().single();
+
     if (error) {
-      console.error('Consultation save error:', error.message, error.details, error.hint);
-      toast.error(`상담 저장 실패: ${error.message}`);
-    } else if (data) {
-      setConsultations(prev => [data, ...prev]);
-      toast.success('상담이 저장되었습니다');
+      console.error('Full Supabase Error (Consultation):', error);
+      console.error('Error Code:', error.code);
+      console.error('Error Message:', error.message);
+      console.error('Error Details:', error.details);
+      toast.error(`로그 저장 실패: ${error.message}`);
+      return;
     }
+    setConsultations(prev => [data, ...prev]);
+    toast.success('로그가 성공적으로 저장되었습니다');
   };
 
   const updateConsultation = async (id: number, data: Partial<Consultation>) => {
@@ -476,39 +488,40 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  const updateProject = async (id: number, data: Partial<Project>) => {
-    const { error } = await supabase.from('projects').update(data).eq('id', id);
-    if (error) {
-      toast.error('프로젝트 수정 실패');
-    } else {
-      setProjects(prev => prev.map(p => p.id === id ? { ...p, ...data } : p));
+  const addProject = async (p: Omit<Project, 'id' | 'created_at'>): Promise<number | undefined> => {
+    const { data: projData, error: projError } = await supabase.from('projects').insert([p]).select().single();
+    if (projError) {
+      console.error('Add project error:', projError);
+      toast.error('프로젝트 추가 실패');
+      return undefined;
     }
+    
+    setProjects(prev => [projData, ...prev]);
+    
+    // Auto-create schedule if dates are provided
+    if (p.start_date && p.end_date) {
+      await addSchedule({
+        title: `[프로젝트] ${p.name}`,
+        start_date: p.start_date,
+        end_date: p.end_date,
+        is_dday: false,
+        category: '팀활동',
+        cohort_id: p.cohort_id,
+        color: '#6366f1'
+      });
+      toast.success('프로젝트 일정이 캘린더에 동기화되었습니다');
+    }
+    return projData.id;
   };
 
-  const addProject = async (p: Omit<Project, 'id'>) => {
-    if (!p.cohort_id || p.cohort_id === 0) {
-      toast.error('유효한 기수를 선택해주세요.');
-      return undefined;
+  const updateProject = async (id: number, p: Partial<Project>) => {
+    const { data: updateData, error: updateError } = await supabase.from('projects').update(p).eq('id', id).select().single();
+    if (updateError) {
+      console.error('Update project error:', updateError);
+      toast.error('프로젝트 수정 실패');
+      return;
     }
-
-    const { data, error } = await supabase
-      .from('projects')
-      .insert([p])
-      .select('*, cohort:cohorts(name)') // Alias cohorts to cohort for UI
-      .single();
-
-    if (error) {
-      console.error('Insert project error:', error.message, error.details);
-      toast.error(`프로젝트 생성 실패: ${error.message}`);
-      return undefined;
-    } else if (!data) {
-      toast.error('프로젝트 데이터 수신 실패');
-      return undefined;
-    } else {
-      setProjects(prev => [data, ...prev]);
-      toast.success('프로젝트가 생성되었습니다');
-      return data.id;
-    }
+    setProjects(prev => prev.map(proj => proj.id === id ? updateData : proj));
   };
 
   const addStage = (stage: string) => {
