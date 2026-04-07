@@ -34,33 +34,32 @@ export default function ConsultationPage() {
       : ''
   );
 
-  // Fix 1: Robust UNION merge in memory (v8.26)
-  const allTimelineLogs = useMemo(() => {
-    // 1. Personal Logs
+  // Fix 1: Unified Log Sync (RE-VERIFIED and STABILIZED v8.27)
+  const allLogs = useMemo(() => {
+    // 1. Individual consultations
     const individual = consultations.map(c => ({ 
       id: `c-${c.id}`,
       originalId: c.id,
       isTeam: false,
-      date: c.consulted_at || '',
+      // Ensure we use Number for matching
+      student_id: Number(c.student_id),
+      dateLine: c.consulted_at || '',
       type: c.type || '개인상담',
       content: c.content || '',
-      follow_up: c.follow_up || '',
-      student_id: c.student_id,
-      display_name: students.find(s => s.id === c.student_id)?.name || '기타'
+      display_name: students.find(s => Number(s.id) === Number(c.student_id))?.name || '기타'
     }));
     
-    // 2. Team Logs
+    // 2. Team project logs
     const teamLogs = projectLogs.map(pl => {
       const t = teams.find(team => Number(team.id) === Number(pl.team_id));
       return {
         id: `pl-${pl.id}`,
         originalId: pl.id,
         isTeam: true,
-        date: pl.log_date || '', // log_date format in DB is YYYY-MM-DD
+        student_id: -1,
+        dateLine: pl.log_date || '',
         type: pl.type || '회의록',
         content: pl.content || '',
-        follow_up: '',
-        student_id: -1,
         display_name: t ? `${t.team_name} (팀)` : '팀 활동'
       };
     });
@@ -69,54 +68,55 @@ export default function ConsultationPage() {
   }, [consultations, projectLogs, students, teams]);
 
   const filteredLogs = useMemo(() => {
-    return allTimelineLogs
+    return allLogs
       .filter((l: any) => {
-        // Filter by Cohort
+        // Filter by Cohort (only for individual logs)
         let matchesCohort = true;
         if (!l.isTeam) {
-          const student = students.find((s) => s.id === l.student_id);
+          const student = students.find((s) => Number(s.id) === Number(l.student_id));
           matchesCohort = selectedCohort === '전체' || student?.cohort?.name === selectedCohort;
         }
         
-        // Filter by Search
-        const matchesSearch = 
-          l.display_name.toLowerCase().includes(searchTerm.toLowerCase()) || 
-          l.content.toLowerCase().includes(searchTerm.toLowerCase());
+        // Filter by Search (Name or Content)
+        const sMatch = l.display_name.toLowerCase().includes(searchTerm.toLowerCase());
+        const cMatch = l.content.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchesSearch = sMatch || cMatch;
           
         // Filter by Type
         const matchesType = filterType === '전체' || l.type === filterType;
         
         // Filter by Date
         let matchesDate = true;
+        const dStr = l.dateLine.split('T')[0];
         if (startDate && endDate) {
-          matchesDate = l.date >= startDate && l.date <= endDate;
+          matchesDate = dStr >= startDate && dStr <= endDate;
         } else if (startDate) {
-          matchesDate = l.date >= startDate;
+          matchesDate = dStr >= startDate;
         } else if (endDate) {
-          matchesDate = l.date <= endDate;
+          matchesDate = dStr <= endDate;
         }
 
         return matchesCohort && matchesSearch && matchesType && matchesDate;
       })
-      .sort((a, b) => b.date.localeCompare(a.date));
-  }, [selectedCohort, searchTerm, filterType, startDate, endDate, allTimelineLogs, students]);
+      .sort((a, b) => b.dateLine.localeCompare(a.dateLine));
+  }, [selectedCohort, searchTerm, filterType, startDate, endDate, allLogs, students]);
 
   const handleSaveConsultation = (data: Partial<Consultation>) => {
     if (editingCons) {
       updateConsultation(editingCons.id, data);
-      toast.success('수정 완료');
+      toast.success('기록이 수정되었습니다');
     } else {
       addConsultation(data as any);
-      toast.success('저장 완료');
+      toast.success('기록이 저장되었습니다');
     }
     setShowAddModal(false);
     setEditingCons(null);
   };
 
-  // Direct Format Fix
+  // Fix 2: HARDWARE date formatting inside loop
   const renderDate = (d: string) => {
     if (!d) return '-';
-    // 2026-04-08T00:00:00+00:00 -> 2026-04-08 00:00
+    // 2026-04-08T00:00:00+00:00 -> 2026-04-08 20:01
     const clean = d.replace('T', ' ').split('.')[0].replace(/(\+\d{2}:\d{2}|Z)$/, '');
     const final = clean.length > 16 ? clean.substring(0, 16) : clean;
     return final.includes(':') ? final : `${final} 00:00`;
@@ -126,12 +126,12 @@ export default function ConsultationPage() {
     <div className="page-wrapper">
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 24 }}>
         <div>
-          <h1 className="page-title">상담 및 활동 통합 이력 <small style={{fontSize: 12, opacity: 0.4}}>v8.26</small></h1>
-          <p className="page-subtitle">개인 및 팀 활동 로그 통합 뷰어 (v8.26)</p>
+          <h1 className="page-title">상담 및 활동 통합 이력 <small style={{fontSize: 12, opacity: 0.4}}>v8.27</small></h1>
+          <p className="page-subtitle">수강생/팀별 활동 기록 통합 관리 시스템</p>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button className="btn btn-primary" onClick={() => setShowAddModal(true)} style={{ height: 42, gap: 8 }}>
-            <PlusCircle size={18} /> 상담 기록 추가
+          <button className="btn btn-primary" onClick={() => { setEditingCons(null); setShowAddModal(true); }} style={{ height: 42, gap: 8 }}>
+            <PlusCircle size={18} /> 활동 추가
           </button>
         </div>
       </div>
@@ -152,38 +152,47 @@ export default function ConsultationPage() {
           <select className="form-select" value={filterType} onChange={e => setFilterType(e.target.value)}>
             <option value="전체">전체 유형</option>
             <option value="회의록">회의록(팀)</option>
-            <option value="멘토피드백">멘토피드백(팀)</option>
             <option value="개인상담">개인상담</option>
-            <option value="진로상담">진로상담</option>
+            <option value="학습점검">학습점검</option>
           </select>
         </div>
       </div>
 
-      <div className="card">
+      <div className="card" style={{ overflow: 'hidden' }}>
         <table className="data-table">
           <thead>
             <tr>
-              <th style={{ width: 140 }}>일시</th>
-              <th style={{ width: 140 }}>이름 / 팀명</th>
-              <th style={{ width: 100 }}>구분</th>
-              <th>로그 내용</th>
+              <th style={{ width: 150 }}>일시</th>
+              <th style={{ width: 140 }}>대상 (이름/팀)</th>
+              <th style={{ width: 110 }}>유형</th>
+              <th>상세 내용</th>
             </tr>
           </thead>
           <tbody>
             {filteredLogs.map((l: any) => (
-              <tr key={l.id}>
-                <td style={{ fontSize: 13, color: 'var(--text-muted)' }}>{renderDate(l.date)}</td>
+              <tr key={l.id} onClick={() => { if(!l.isTeam){ const s = students.find(std => Number(std.id) === Number(l.student_id)); if(s) setSelectedStudent(s); } }} style={{ cursor: l.isTeam ? 'default' : 'pointer' }}>
+                <td style={{ fontSize: 13, color: 'var(--text-muted)' }}>{renderDate(l.dateLine)}</td>
                 <td style={{ fontWeight: 700, color: l.isTeam ? 'var(--accent)' : 'inherit' }}>{l.display_name}</td>
                 <td><span className={`badge ${l.isTeam ? 'badge-p1' : 'badge-p4'}`}>{l.type}</span></td>
-                <td style={{ fontSize: 13, lineHeight: 1.4 }}>{l.content}</td>
+                <td style={{ fontSize: 14 }}>{l.content}</td>
               </tr>
             ))}
           </tbody>
         </table>
-        {filteredLogs.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>통합 로그가 없습니다.</div>}
+        {filteredLogs.length === 0 && <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-muted)' }}>통합 로그 내역이 없습니다.</div>}
       </div>
 
-      <ConsultationModal isOpen={showAddModal} onClose={() => { setShowAddModal(false); setEditingCons(null); }} onSave={handleSaveConsultation} editingCons={editingCons} allStudents={students} />
+      <ConsultationModal 
+        isOpen={showAddModal} 
+        onClose={() => { setShowAddModal(false); setEditingCons(null); }} 
+        onSave={handleSaveConsultation} 
+        editingCons={editingCons}
+        allStudents={students} 
+      />
+
+      {selectedStudent && (
+        <StudentDetailPanel student={selectedStudent} tags={[]} consultations={[]} onClose={() => setSelectedStudent(null)} initialTab="consultations" />
+      )}
     </div>
   );
 }
