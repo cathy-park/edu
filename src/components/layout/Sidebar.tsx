@@ -22,7 +22,7 @@ export default function Sidebar() {
     <aside className="sidebar">
       <Link href="/" className="sidebar-logo" style={{ textDecoration: 'none', cursor: 'pointer' }}>
         <div className="sidebar-logo-icon" style={{ background: 'transparent' }}>
-          <img src="/logo.png?v=12" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
+          <img src="/logo.png?v=2" alt="Logo" style={{ width: '100%', height: '100%', objectFit: 'contain', display: 'block' }} />
         </div>
         <div className="sidebar-logo-text">
           EduManager

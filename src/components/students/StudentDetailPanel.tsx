@@ -109,15 +109,19 @@ export default function StudentDetailPanel({
     setShowConsModal(true);
   };
 
-  const handleConsSubmit = (data: Partial<Consultation>) => {
-    if (editingCons) {
-      updateConsultation(editingCons.id, data);
-      toast.success('상담 이력이 수정되었습니다');
-    } else {
-      addConsultation({ ...data, student_id: student.id } as any);
-      toast.success('상담 이력이 등록되었습니다');
+  const handleConsSubmit = async (data: Partial<Consultation>) => {
+    try {
+      if (editingCons) {
+        await updateConsultation(editingCons.id, data);
+        toast.success('상담 이력이 수정되었습니다');
+      } else {
+        await addConsultation({ ...data, student_id: student.id } as any);
+        // Note: toast success is handled within addConsultation or after this call
+      }
+      setShowConsModal(false);
+    } catch (error) {
+      console.error('Submit Error:', error);
     }
-    setShowConsModal(false);
   };
 
   const openNoteModal = (note?: Note) => {

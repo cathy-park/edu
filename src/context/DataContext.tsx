@@ -405,7 +405,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       const payload = {
         student_id: c.student_id,
         project_id: c.project_id || null,
-        consulted_at: c.consulted_at || new Date().toISOString(),
+        consulted_at: c.consulted_at && c.consulted_at.includes('T') 
+          ? c.consulted_at 
+          : new Date(c.consulted_at || Date.now()).toISOString(),
         type: c.type || '기타',
         content: c.content || '',
         follow_up: c.follow_up || ''
@@ -528,13 +530,30 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     return projData.id;
   };
 
+  const sanitizePayload = <T extends Record<string, any>>(obj: T): T => {
+    const sanitized: any = { ...obj };
+    Object.keys(sanitized).forEach(key => {
+      if (sanitized[key] === '') sanitized[key] = null;
+    });
+    return sanitized as T;
+  };
+
   const updateProject = async (id: number, p: Partial<Project>) => {
     const oldProject = projects.find(proj => proj.id === id);
-    const { data: updateData, error: updateError } = await supabase.from('projects').update(p).eq('id', id).select().single();
+    const sanitized = sanitizePayload(p);
+    
+    const { id: _, created_at: __, ...updateFields } = sanitized as any;
+
+    const { data: updateData, error: updateError } = await supabase
+      .from('projects')
+      .update(updateFields)
+      .eq('id', id)
+      .select()
+      .maybeSingle();
     
     if (updateError) {
       console.error('Update project error:', updateError);
-      toast.error('프로젝트 수정 실패');
+      toast.error('프로젝트 수정 실패: ' + updateError.message);
       return;
     }
     
@@ -544,14 +563,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     if (oldProject && (p.start_date !== undefined || p.end_date !== undefined || p.name !== undefined)) {
       const schedule = schedules.find(s => s.title === `[프로젝트] ${oldProject.name}`);
       const newTitle = p.name ? `[프로젝트] ${p.name}` : `[프로젝트] ${oldProject.name}`;
-      const newStart = p.start_date !== undefined ? p.start_date : oldProject.start_date;
-      const newEnd = p.end_date !== undefined ? p.end_date : oldProject.end_date;
+      const newStart = p.start_date !== undefined ? (p.start_date || '') : (oldProject.start_date || '');
+      const newEnd = p.end_date !== undefined ? (p.end_date || '') : (oldProject.end_date || '');
 
       if (schedule) {
         await updateSchedule(schedule.id, {
           title: newTitle,
-          start_date: newStart || '',
-          end_date: newEnd || ''
+          start_date: newStart,
+          end_date: newEnd
         });
       } else if (newStart && newEnd) {
         await addSchedule({
@@ -565,6 +584,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         });
       }
     }
+    toast.success('프로젝트가 동기화되었습니다.');
   };
 
   const addStage = (stage: string) => {
