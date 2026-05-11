@@ -37,32 +37,40 @@ export default function ConsultationPage() {
   // Fix 1: Unified Log Sync (RE-VERIFIED and STABILIZED v8.27)
   const allLogs = useMemo(() => {
     // 1. Individual consultations
-    const individual = consultations.map(c => ({ 
-      id: `c-${c.id}`,
-      originalId: c.id,
-      isTeam: false,
-      // Ensure we use Number for matching
-      student_id: Number(c.student_id),
-      dateLine: c.consulted_at || '',
-      type: c.type || '개인상담',
-      content: c.content || '',
-      display_name: students.find(s => Number(s.id) === Number(c.student_id))?.name || '기타'
-    }));
+    const individual = consultations
+      .map(c => {
+        const student = students.find(s => Number(s.id) === Number(c.student_id));
+        if (!student) return null; // 학생 정보가 없으면 제외
+        return { 
+          id: `c-${c.id}`,
+          originalId: c.id,
+          isTeam: false,
+          student_id: Number(c.student_id),
+          dateLine: c.consulted_at || '',
+          type: c.type || '개인상담',
+          content: c.content || '',
+          display_name: student.name
+        };
+      })
+      .filter(Boolean) as any[];
     
     // 2. Team project logs
-    const teamLogs = projectLogs.map(pl => {
-      const t = teams.find(team => Number(team.id) === Number(pl.team_id));
-      return {
-        id: `pl-${pl.id}`,
-        originalId: pl.id,
-        isTeam: true,
-        student_id: -1,
-        dateLine: pl.log_date || '',
-        type: pl.type || '회의록',
-        content: pl.content || '',
-        display_name: t ? `${t.team_name} (팀)` : '팀 활동'
-      };
-    });
+    const teamLogs = projectLogs
+      .map(pl => {
+        const t = teams.find(team => Number(team.id) === Number(pl.team_id));
+        if (!t) return null; // 팀 정보가 없으면 제외
+        return {
+          id: `pl-${pl.id}`,
+          originalId: pl.id,
+          isTeam: true,
+          student_id: -1,
+          dateLine: pl.log_date || '',
+          type: pl.type || '회의록',
+          content: pl.content || '',
+          display_name: `${t.team_name} (팀)`
+        };
+      })
+      .filter(Boolean) as any[];
     
     return [...individual, ...teamLogs];
   }, [consultations, projectLogs, students, teams]);
