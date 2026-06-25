@@ -201,20 +201,74 @@ create table public.work_tasks (
   created_at timestamptz default now()
 );
 
--- [5] RLS 비활성화 (개발 편의성)
-alter table public.cohorts disable row level security;
-alter table public.projects disable row level security;
-alter table public.students disable row level security;
-alter table public.student_tags disable row level security;
-alter table public.consultations disable row level security;
-alter table public.grades disable row level security;
-alter table public.attendances disable row level security;
-alter table public.teams disable row level security;
-alter table public.team_members disable row level security;
-alter table public.project_logs disable row level security;
-alter table public.schedules disable row level security;
-alter table public.todos disable row level security;
-alter table public.work_tasks disable row level security;
+-- [5] RLS 활성화 및 전체 허용 정책 추가 (개발 편의성을 유지하면서 보안 경고 해결)
+-- 각 테이블의 RLS를 활성화하고, 누구나 읽고 쓸 수 있는 정책(Policy)을 추가합니다.
+
+-- 5-1. cohorts
+alter table public.cohorts enable row level security;
+drop policy if exists "Allow all access to cohorts" on public.cohorts;
+create policy "Allow all access to cohorts" on public.cohorts for all using (true) with check (true);
+
+-- 5-2. projects
+alter table public.projects enable row level security;
+drop policy if exists "Allow all access to projects" on public.projects;
+create policy "Allow all access to projects" on public.projects for all using (true) with check (true);
+
+-- 5-3. students
+alter table public.students enable row level security;
+drop policy if exists "Allow all access to students" on public.students;
+create policy "Allow all access to students" on public.students for all using (true) with check (true);
+
+-- 5-4. student_tags
+alter table public.student_tags enable row level security;
+drop policy if exists "Allow all access to student_tags" on public.student_tags;
+create policy "Allow all access to student_tags" on public.student_tags for all using (true) with check (true);
+
+-- 5-5. consultations
+alter table public.consultations enable row level security;
+drop policy if exists "Allow all access to consultations" on public.consultations;
+create policy "Allow all access to consultations" on public.consultations for all using (true) with check (true);
+
+-- 5-6. grades
+alter table public.grades enable row level security;
+drop policy if exists "Allow all access to grades" on public.grades;
+create policy "Allow all access to grades" on public.grades for all using (true) with check (true);
+
+-- 5-7. attendances
+alter table public.attendances enable row level security;
+drop policy if exists "Allow all access to attendances" on public.attendances;
+create policy "Allow all access to attendances" on public.attendances for all using (true) with check (true);
+
+-- 5-8. teams
+alter table public.teams enable row level security;
+drop policy if exists "Allow all access to teams" on public.teams;
+create policy "Allow all access to teams" on public.teams for all using (true) with check (true);
+
+-- 5-9. team_members
+alter table public.team_members enable row level security;
+drop policy if exists "Allow all access to team_members" on public.team_members;
+create policy "Allow all access to team_members" on public.team_members for all using (true) with check (true);
+
+-- 5-10. project_logs
+alter table public.project_logs enable row level security;
+drop policy if exists "Allow all access to project_logs" on public.project_logs;
+create policy "Allow all access to project_logs" on public.project_logs for all using (true) with check (true);
+
+-- 5-11. schedules
+alter table public.schedules enable row level security;
+drop policy if exists "Allow all access to schedules" on public.schedules;
+create policy "Allow all access to schedules" on public.schedules for all using (true) with check (true);
+
+-- 5-12. todos
+alter table public.todos enable row level security;
+drop policy if exists "Allow all access to todos" on public.todos;
+create policy "Allow all access to todos" on public.todos for all using (true) with check (true);
+
+-- 5-13. work_tasks
+alter table public.work_tasks enable row level security;
+drop policy if exists "Allow all access to work_tasks" on public.work_tasks;
+create policy "Allow all access to work_tasks" on public.work_tasks for all using (true) with check (true);
+
 
 -- [6] 샘플 데이터 입력
 insert into public.cohorts (name, start_date) values
